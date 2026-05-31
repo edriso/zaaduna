@@ -23,12 +23,17 @@ export type { ScheduleDef } from './types';
  *
  * Cadence is deliberately calm — what hurts retention is the number of
  * separate notification moments, not the message count. Related posts
- * are co-scheduled a minute apart into one "session" (a Friday morning
- * ping, a nightly bedtime ping), so it's ≤3 interruptions a day.
+ * are co-scheduled a minute apart into one "session", and the rider posts
+ * carry `silent: true` (Telegram disable_notification) so each session
+ * rings exactly once: a morning ping (morning azkar), an evening ping
+ * (evening azkar), and a bedtime ping (the night poll). That is ≤3
+ * interruptions a day; the Friday/fasting riders still arrive, just
+ * without a buzz.
  *
  * In the bedtime window the poll fires LAST (fasting → pre-sleep → poll),
  * so it sits newest at the bottom; its last option «سورة المُلك وأذكار
- * النوم» points the reader up to the pre-sleep message to act on.
+ * النوم» points the reader up to the pre-sleep message to act on. The poll
+ * is the one audible bedtime post, so the single ping lands on it.
  */
 export const schedules: ScheduleDef[] = [
   {
@@ -47,8 +52,11 @@ export const schedules: ScheduleDef[] = [
     // time is forgiving; what matters is bundling with the morning azkar.
     cron: '32 5 * * 5',
     content: fridaySunnah,
+    // Silent: rides 2 min after morning_azkar, so Friday still gets just
+    // the one morning ping.
+    silent: true,
     description:
-      'سننُ الجمعة (الطهارة والزينة، التبكير، الكهف، الصلاة على النبي)، الجمعة 5:32 ص (مع أذكار الصباح).',
+      'سننُ الجمعة (الطهارة والزينة، التبكير، الكهف، الصلاة على النبي)، الجمعة 5:32 ص (صامت، مع أذكار الصباح).',
   },
   {
     name: 'evening_azkar',
@@ -70,16 +78,21 @@ export const schedules: ScheduleDef[] = [
     // forbidden — Eid or أيام التشريق. Narrow/asymmetric so يوم عرفة is
     // never suppressed; see lib/hijri.ts.
     skipIf: (now) => fastForbiddenTomorrow(now, config.timezone),
+    // Silent: part of the bedtime session; the night poll carries its ping.
+    silent: true,
     description:
-      'تذكير صيام الإثنين/الخميس، مساء الأحد والأربعاء 9:40 م (مع مجموعة ما قبل النوم). يُتخطّى تلقائيًّا إن كان الغد عيدًا أو من أيّام التشريق.',
+      'تذكير صيام الإثنين/الخميس، مساء الأحد والأربعاء 9:40 م (صامت، مع مجموعة ما قبل النوم). يُتخطّى تلقائيًّا إن كان الغد عيدًا أو من أيّام التشريق.',
   },
   {
     name: 'pre_sleep',
     kind: 'message',
     cron: '43 21 * * *',
     content: preSleepReminder,
+    // Silent: part of the bedtime session; the night poll (9:45) carries
+    // the single bedtime ping and sits just below this message.
+    silent: true,
     description:
-      'سورة المُلك وأذكار النوم ونيّة القيام، كل يوم 9:43 م (قبل استبيان المراجعة بدقيقتين).',
+      'سورة المُلك وأذكار النوم ونيّة القيام، كل يوم 9:43 م (صامت، قبل استبيان المراجعة بدقيقتين).',
   },
   {
     name: 'night_review_poll',

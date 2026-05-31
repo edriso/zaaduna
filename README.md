@@ -63,17 +63,26 @@ al-Qura calendar in `TZ_NAME`. عرفة is never withheld. See
 Posts are deliberately grouped into one tight window so they arrive
 together as a single "session" instead of scattered buzzes. What makes
 people mute a channel is the number of separate interruption moments,
-not the message count. The result is **at most 3 moments a day**:
+not the message count. So within each session only the anchor post makes
+a sound; the posts co-scheduled a minute later are sent **silently**
+(Telegram's `disable_notification`) and still appear in the channel,
+they just do not buzz. The result is **exactly 3 notification moments a
+day**:
 
-1. A morning one (the azkar, plus Surah Al-Kahf on Friday).
-2. A late-afternoon one (the evening azkar).
-3. A bedtime one (the pre-sleep reminder, then the poll, plus the
-   fasting reminder on Sunday and Wednesday).
+1. A morning one — the azkar rings; on Friday the Surah Al-Kahf reminder
+   rides in silently right after.
+2. A late-afternoon one — the evening azkar rings.
+3. A bedtime one — the fasting reminder (Sunday and Wednesday) and the
+   pre-sleep reminder arrive silently, then the poll rings.
 
-The poll fires last on purpose: its last option is «سورة المُلك وأذكار
-النوم», so a member who sees the gap in their checklist scrolls up to
-the pre-sleep message above it and acts on the dhikr there. The poll
-is a self-review nudge toward the azkar, not a competitor.
+The poll fires last on purpose and is the audible bedtime post: its last
+option is «سورة المُلك وأذكار النوم», so a member who sees the gap in
+their checklist scrolls up to the (silent) pre-sleep message above it and
+acts on the dhikr there. The poll is a self-review nudge toward the
+azkar, not a competitor.
+
+Which posts ride in silently lives in one place: the `silent: true` flag
+on those entries in `src/schedules.ts`.
 
 ## ⚠️ Before going live: have the content reviewed
 

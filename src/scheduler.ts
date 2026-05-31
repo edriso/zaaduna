@@ -69,14 +69,14 @@ async function sendForKind(bot: Bot<Context>, def: ScheduleDef): Promise<number 
   if (def.kind === 'poll') {
     // `poll` may be a factory rebuilt per fire (day-of-week variants).
     const spec = typeof def.poll === 'function' ? def.poll() : def.poll;
-    return sendPollToChannel(bot, spec, { scheduleName: def.name });
+    return sendPollToChannel(bot, spec, { scheduleName: def.name, silent: def.silent });
   }
   const text = pickContent(def.content);
   if (!text) {
     logger.warn('Schedule has no content to post, skipping', { name: def.name });
     return null;
   }
-  return postToChannel(bot, text, { scheduleName: def.name });
+  return postToChannel(bot, text, { scheduleName: def.name, silent: def.silent });
 }
 
 /** Wrap a schedule run with logging + error containment (node-cron does

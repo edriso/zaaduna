@@ -74,6 +74,24 @@ describe('postToChannel', () => {
     const bot = fakeBot({ sendMessage });
     await expect(postToChannel(bot, 'hi', { scheduleName: 'x' })).resolves.toBeNull();
   });
+
+  it('posts silently when asked: disable_notification true, still no parse_mode', async () => {
+    const sendMessage = vi.fn().mockResolvedValue({ message_id: 7 });
+    const bot = fakeBot({ sendMessage });
+    await postToChannel(bot, 'ذكر صامت', { scheduleName: 'friday_sunnah', silent: true });
+    const args = sendMessage.mock.calls[0];
+    expect(args.length).toBe(3); // (chat_id, text, other)
+    expect(args[2]).toEqual({ disable_notification: true });
+    expect(args[2].parse_mode).toBeUndefined();
+  });
+
+  it('does not pass a notification flag on the audible (default) path', async () => {
+    const sendMessage = vi.fn().mockResolvedValue({ message_id: 8 });
+    const bot = fakeBot({ sendMessage });
+    await postToChannel(bot, 'ذكر مسموع', { scheduleName: 'morning_azkar' });
+    // Bare (chat_id, text): no options object at all, so the post rings.
+    expect(sendMessage.mock.calls[0].length).toBe(2);
+  });
 });
 
 describe('sendPollToChannel', () => {
@@ -126,6 +144,16 @@ describe('sendPollToChannel', () => {
     const other = sendPoll.mock.calls[0][3];
     expect(other.is_anonymous).toBe(false);
     expect(other.allows_multiple_answers).toBe(false);
+  });
+
+  it('rings by default (disable_notification false) and is silenceable', async () => {
+    const audible = vi.fn().mockResolvedValue({ message_id: 1 });
+    await sendPollToChannel(fakeBot({ sendPoll: audible }), base);
+    expect(audible.mock.calls[0][3].disable_notification).toBe(false);
+
+    const silent = vi.fn().mockResolvedValue({ message_id: 1 });
+    await sendPollToChannel(fakeBot({ sendPoll: silent }), base, { silent: true });
+    expect(silent.mock.calls[0][3].disable_notification).toBe(true);
   });
 
   it('sets a future close_date ~22h ahead by default', async () => {

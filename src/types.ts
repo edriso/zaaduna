@@ -51,6 +51,15 @@ interface BaseSchedule {
    * keeps "a new schedule needs no framework change" intact.
    */
   skipIf?: (now: Date) => boolean;
+  /**
+   * Post silently (Telegram disable_notification): the message still
+   * appears in the channel, but the reader's device does not make a sound
+   * or vibrate. Used for the "rider" posts that are co-scheduled a minute
+   * after an anchor (Friday sunnah after the morning azkar; the fasting
+   * nudge and pre-sleep dhikr before the night poll), so each session is a
+   * single ping. Defaults to false (the post rings). See schedules.ts.
+   */
+  silent?: boolean;
 }
 
 /** Posts a text message. `content` may be a fixed string or, if an

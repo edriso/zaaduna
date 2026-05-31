@@ -12,13 +12,18 @@ import type { PollSpec } from '../types';
 export async function postToChannel(
   bot: Bot<Context>,
   text: string,
-  meta: { scheduleName?: string } = {},
+  meta: { scheduleName?: string; silent?: boolean } = {},
 ): Promise<number | null> {
   try {
-    const message = await bot.api.sendMessage(config.channelChatId, text);
+    // Only pass an options object when posting silently, so the common
+    // (audible) path stays a bare (chat_id, text) call with no parse_mode.
+    const message = meta.silent
+      ? await bot.api.sendMessage(config.channelChatId, text, { disable_notification: true })
+      : await bot.api.sendMessage(config.channelChatId, text);
     logger.info('Posted message to channel', {
       scheduleName: meta.scheduleName,
       messageId: message.message_id,
+      silent: meta.silent ?? false,
     });
     return message.message_id;
   } catch (err) {
@@ -90,7 +95,7 @@ export function rtlIsolate(text: string): string {
 export async function sendPollToChannel(
   bot: Bot<Context>,
   spec: PollSpec,
-  meta: { scheduleName?: string } = {},
+  meta: { scheduleName?: string; silent?: boolean } = {},
 ): Promise<number | null> {
   const isAnonymous = spec.isAnonymous ?? true;
   const allowsMultiple = spec.allowsMultipleAnswers ?? true;
@@ -112,6 +117,7 @@ export async function sendPollToChannel(
         is_anonymous: isAnonymous,
         allows_multiple_answers: allowsMultiple,
         close_date: closeDate,
+        disable_notification: meta.silent ?? false,
       },
     );
     logger.info('Posted poll to channel', {
@@ -120,6 +126,7 @@ export async function sendPollToChannel(
       options: spec.options.length,
       isAnonymous,
       closeInHours: clampedHours,
+      silent: meta.silent ?? false,
     });
     return message.message_id;
   } catch (err) {

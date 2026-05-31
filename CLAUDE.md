@@ -80,6 +80,17 @@ zaaduna/
   other admins) is never tracked here, and therefore never deleted.
   See `scheduler.ts#runSchedule` + `lib/state.ts`.
 
+- **One ping per session (`silent` riders).** What makes people mute a
+  channel is the number of separate notification moments, not the message
+  count. So each session has one anchor that rings and the rest ride in
+  with `silent: true` (Telegram `disable_notification`): they still appear
+  in the channel, they just do not buzz. Anchors (ring): `morning_azkar`,
+  `evening_azkar`, `night_review_poll`. Riders (silent): `friday_sunnah`
+  (after the morning azkar), `fasting_reminder` and `pre_sleep` (before the
+  night poll). Net: exactly 3 pings a day. The flag lives on the schedule
+  entry (`types.ts` → `BaseSchedule.silent`), the scheduler passes it to
+  `lib/post.ts`, and a test pins the anchor/rider split.
+
 - **Anonymous poll, not per-user tracking.** Streaks/personal history
   would need a DB and a subscriber bot, and re-introduce showing-off
   (riya). The anonymous poll keeps motivation without either. Do not
@@ -221,10 +232,12 @@ legacy single-number migration, array round-trip, clear-on-empty,
 parent-dir creation), `startScheduler` skipping an invalid cron,
 `pickContent` (blank and array handling), `channelUrlFrom`,
 `resolvePort`, the `skipIf` guard (skips the post + leaves the ring
-buffer untouched), and `lib/hijri.ts` (Umm al-Qura mapping; Eid/Tashreeq
-suppression incl. the +1 day-14 cushion; عرفة and ستّ من شوّال never
-suppressed; the poll drops «صيام» on a Tashreeq day). The count is
-intentionally not stated here so it never goes stale.
+buffer untouched), the silent-rider split (anchors ring, the Friday /
+fasting / pre-sleep riders carry `silent: true`, and `post.ts` sends
+`disable_notification` only when asked), and `lib/hijri.ts` (Umm al-Qura
+mapping; Eid/Tashreeq suppression incl. the +1 day-14 cushion; عرفة and
+ستّ من شوّال never suppressed; the poll drops «صيام» on a Tashreeq day).
+The count is intentionally not stated here so it never goes stale.
 
 `pnpm send-test` runs `scripts/send-test.ts`: a manual dev tool that
 fires every schedule once via the same `runSchedule` the cron loop

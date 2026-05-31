@@ -252,6 +252,30 @@ describe('bedtime window order', () => {
   });
 });
 
+describe('notification sessions (silent riders)', () => {
+  // The documented design: each session rings once. The anchors ring; the
+  // posts co-scheduled a minute later ride along silently. See schedules.ts.
+  const AUDIBLE = ['morning_azkar', 'evening_azkar', 'night_review_poll'];
+  const SILENT = ['friday_sunnah', 'fasting_reminder', 'pre_sleep'];
+
+  it('rides the Friday/fasting/pre-sleep posts in silently', () => {
+    for (const name of SILENT) {
+      expect(findSchedule(name)?.silent, `${name} should be silent`).toBe(true);
+    }
+  });
+
+  it('lets the three anchors ring (one ping per session)', () => {
+    for (const name of AUDIBLE) {
+      // silent is undefined or false on an anchor; never true.
+      expect(findSchedule(name)?.silent, `${name} should ring`).not.toBe(true);
+    }
+  });
+
+  it('classifies every schedule as exactly one of anchor or rider', () => {
+    expect(new Set([...AUDIBLE, ...SILENT])).toEqual(new Set(schedules.map((s) => s.name)));
+  });
+});
+
 describe('findSchedule', () => {
   it('finds a schedule by name', () => {
     const first = schedules[0];
