@@ -18,8 +18,8 @@ importers:
         specifier: ^4.2.1
         version: 4.2.1
       telegram-broadcast-kit:
-        specifier: github:edriso/telegram-broadcast-kit#v0.1.0
-        version: https://codeload.github.com/edriso/telegram-broadcast-kit/tar.gz/458b398c106d5c64ef6a9872a47fa708fa1b9735(grammy@1.42.0)(node-cron@4.2.1)
+        specifier: github:edriso/telegram-broadcast-kit#v0.2.1
+        version: https://codeload.github.com/edriso/telegram-broadcast-kit/tar.gz/1d4fd0db2998520a654f1cd504fad14a10616d5f(grammy@1.42.0)(node-cron@4.2.1)
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
@@ -610,9 +610,9 @@ packages:
   std-env@4.1.0:
     resolution: {integrity: sha512-Rq7ybcX2RuC55r9oaPVEW7/xu3tj8u4GeBYHBWCychFtzMIr86A7e3PPEBPT37sHStKX3+TiX/Fr/ACmJLVlLQ==}
 
-  telegram-broadcast-kit@https://codeload.github.com/edriso/telegram-broadcast-kit/tar.gz/458b398c106d5c64ef6a9872a47fa708fa1b9735:
-    resolution: {tarball: https://codeload.github.com/edriso/telegram-broadcast-kit/tar.gz/458b398c106d5c64ef6a9872a47fa708fa1b9735}
-    version: 0.1.0
+  telegram-broadcast-kit@https://codeload.github.com/edriso/telegram-broadcast-kit/tar.gz/1d4fd0db2998520a654f1cd504fad14a10616d5f:
+    resolution: {gitHosted: true, integrity: sha512-wscg1T/F0qxbzkYeBXfFqMLhjNE8frMpNs9dmsugevdyfsA73hzZRnh3aofE9E0J8P5jEJeKlpHT+XWfMsKfOw==, tarball: https://codeload.github.com/edriso/telegram-broadcast-kit/tar.gz/1d4fd0db2998520a654f1cd504fad14a10616d5f}
+    version: 0.2.1
     engines: {node: '>=20.0.0'}
     peerDependencies:
       grammy: ^1.42.0
@@ -1183,7 +1183,7 @@ snapshots:
 
   std-env@4.1.0: {}
 
-  telegram-broadcast-kit@https://codeload.github.com/edriso/telegram-broadcast-kit/tar.gz/458b398c106d5c64ef6a9872a47fa708fa1b9735(grammy@1.42.0)(node-cron@4.2.1):
+  telegram-broadcast-kit@https://codeload.github.com/edriso/telegram-broadcast-kit/tar.gz/1d4fd0db2998520a654f1cd504fad14a10616d5f(grammy@1.42.0)(node-cron@4.2.1):
     dependencies:
       dotenv: 17.4.2
       grammy: 1.42.0
