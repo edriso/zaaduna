@@ -239,6 +239,12 @@ mapping; Eid/Tashreeq suppression incl. the +1 day-14 cushion; عرفة and
 ستّ من شوّال never suppressed; the poll drops «صيام» on a Tashreeq day).
 The count is intentionally not stated here so it never goes stale.
 
+`pnpm check` runs `typecheck` + `format:check` + `test` — the same gate
+CI enforces. The deploy workflow (`.github/workflows/deploy.yml`) runs it
+in a `test` job on every push to main AND every pull request; the `deploy`
+job has `needs: test` and only fires on a push, so a red check never
+reaches the VPS and a PR never deploys. Run `pnpm check` before pushing.
+
 `pnpm send-test` runs `scripts/send-test.ts`: a manual dev tool that
 fires every schedule once via the same `runSchedule` the cron loop
 uses, then exits. Four properties matter:

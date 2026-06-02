@@ -10,6 +10,7 @@
     "build": "tsc",
     "start": "node --import tsx dist/index.js",
     "typecheck": "tsc --noEmit",
+    "check": "pnpm typecheck && pnpm format:check && pnpm test",
     "test": "vitest run",
     "test:watch": "vitest",
     "send-test": "tsx scripts/send-test.ts",

@@ -50,4 +50,10 @@ RUN mkdir -p /app/data && chown -R node:node /app/data
 # UID 1000.
 USER node
 
+# Liveness: hit the in-process /health server so an orchestrator can tell a
+# wedged bot from a healthy one and restart it. Uses node's built-in fetch (no
+# curl in the alpine image). PORT matches what health.ts binds (default 8080).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
 CMD ["node", "--import", "tsx", "dist/index.js"]
