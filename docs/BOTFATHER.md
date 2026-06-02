@@ -4,13 +4,15 @@ Ready-to-paste text for the Zaaduna bot in @BotFather (the `/mybots` ->
 Edit Bot menu). The audience is Arabic, so the public texts are Arabic.
 Copy each block as-is.
 
-Note: this bot DOES set its command list automatically. On start it calls
-`setMyCommands` with a single `start` command (see `setBotCommands` in
-`src/bot.ts`), so you do NOT need to paste a Commands block into BotFather;
-the menu appears on its own once the bot has run. (For contrast, the
-Fluent Owls bot does not self-register and must have its commands pasted
-in by hand.) The Commands block below is included only if you want to set
-it manually anyway.
+Note: this bot sets its command list AND its About + Description
+automatically. On start it calls `setMyCommands` with a single `start`
+command, then `setMyShortDescription` (About) and `setMyDescription`
+(Description) — see `setBotProfile` in `src/bot.ts`, with the texts in
+`src/content/profile.ts` (kept verbatim from the blocks below). So you do
+NOT need to paste a Commands, About, or Description block into BotFather;
+they appear on their own once the bot has run. (For contrast, the Fluent
+Owls bot does not self-register and must have these pasted in by hand.) The
+blocks below are kept only for manual setting and as the source of truth.
 
 - Bot channel: **set your own handle** (e.g. `@zaaduna`).
 

@@ -1,5 +1,5 @@
 import { config } from './config';
-import { bot, setBotCommands } from './bot';
+import { bot, setBotProfile } from './bot';
 import { startScheduler, stopScheduler } from './scheduler';
 import { startHealthServer, logger, initState } from 'telegram-broadcast-kit';
 
@@ -14,7 +14,7 @@ async function main() {
   // knows which previous message (if any) to delete.
   await initState(config.stateFilePath);
 
-  await setBotCommands();
+  await setBotProfile();
   startScheduler(bot);
   startHealthServer();
 

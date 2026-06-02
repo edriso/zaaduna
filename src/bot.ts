@@ -1,6 +1,7 @@
 import { Bot, Context } from 'grammy';
 import { logger } from 'telegram-broadcast-kit';
 import { config } from './config';
+import { botAbout, botDescription } from './content/profile';
 import { schedules, findSchedule } from './schedules';
 import { runSchedule } from './scheduler';
 
@@ -110,8 +111,14 @@ bot.catch((err) => {
   logger.error('Bot error', { error: String(err.error), update: err.ctx.update.update_id });
 });
 
-async function setBotCommands() {
+async function setBotProfile() {
   await bot.api.setMyCommands([{ command: 'start', description: 'About this bot' }]);
+  // Set the About (short description) and Description the same way as the
+  // commands, so the bot is self-describing on deploy — no manual @BotFather
+  // step. The texts live in src/content/profile.ts (verbatim from
+  // docs/BOTFATHER.md) and stay within Telegram's 120 / 512 char limits.
+  await bot.api.setMyShortDescription(botAbout);
+  await bot.api.setMyDescription(botDescription);
 }
 
-export { bot, setBotCommands };
+export { bot, setBotProfile };
