@@ -18,15 +18,14 @@ touched. See the "Replace-on-next-fire" design choice below.
 ```
 zaaduna/
 ├── src/
-│   ├── index.ts        Entry point (config → bot → scheduler → health)
+│   ├── index.ts        Entry point (config → state → bot → scheduler → health)
 │   ├── config.ts       env: BOT_TOKEN, CHANNEL_CHAT_ID, CHANNEL_PUBLIC_URL, ...
 │   ├── bot.ts          Grammy setup, /start + admin commands
-│   ├── scheduler.ts    node-cron registration; runSchedule() dispatch
+│   ├── scheduler.ts    runSchedule() dispatch + ring-buffer (cron registry from the kit)
 │   ├── schedules.ts    THE EDIT POINT: the schedule list + findSchedule
 │   ├── types.ts        ScheduleDef union + PollSpec (no import cycle)
-│   ├── health.ts       /health HTTP endpoint
 │   ├── content/        Arabic content modules + poll spec + welcome.ts
-│   └── lib/            logger, pick, post (msg+poll+delete), state
+│   └── lib/            hijri (Umm al-Qura no-fast days)
 ├── scripts/
 │   ├── send-test.ts       Manual dev sender (not imported by the app)
 │   └── post-welcome.ts    Manual welcome-message post/edit (not imported)
@@ -39,6 +38,13 @@ zaaduna/
 ├── package.json
 └── tsconfig.json
 ```
+
+The generic plumbing — `logger`, `env`, `bidi`, `pickContent`, the JSON-pointer `state`,
+`post`/`sendPoll`/`deleteMessage`, the cron `Scheduler`, and the `/health` server — comes from
+**`telegram-broadcast-kit`** (pinned by tag in `package.json`, auto-bumped by Renovate). This bot
+keeps only what is zaaduna-specific: the schedule table, content, the `runSchedule` ring-buffer
+dispatch, and `lib/hijri.ts`. Mentions of `lib/post.ts` / `lib/state.ts` / `pickContent` below now
+refer to those kit modules. To change shared code, edit the kit and ship a new tag — see its README.
 
 ## Tech stack
 

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "packageRules": [
+    {
+      "description": "Stay quiet by default: propose no updates for any dependency, so this repo only ever sees the shared-kernel bump.",
+      "matchPackageNames": ["*"],
+      "enabled": false
+    },
+    {
+      "description": "...except the shared kernel. The substring regex matches whichever name Renovate keys this github dependency on: its package name (telegram-broadcast-kit) or its repo (edriso/telegram-broadcast-kit). The npm manager updates the tag and the lockfile together.",
+      "matchPackageNames": ["/telegram-broadcast-kit/"],
+      "enabled": true
+    }
+  ]
+}

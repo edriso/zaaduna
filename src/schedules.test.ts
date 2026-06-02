@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import cron from 'node-cron';
 import { schedules, findSchedule } from './schedules';
-import { MIN_CLOSE_HOURS, MAX_CLOSE_HOURS, rtlIsolate } from './lib/post';
+import { MIN_CLOSE_HOURS, MAX_CLOSE_HOURS, rtlIsolate } from 'telegram-broadcast-kit';
 import { buildNightReviewPoll } from './content/poll';
 import { hijriDate } from './lib/hijri';
 import type { PollSpec } from './types';

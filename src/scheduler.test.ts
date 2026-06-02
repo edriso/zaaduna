@@ -8,7 +8,7 @@ import {
   getLastMessageId,
   setLastMessageId,
   getMessageIds,
-} from './lib/state';
+} from 'telegram-broadcast-kit';
 
 /**
  * runSchedule must dispatch on `kind`: messages go through sendMessage,

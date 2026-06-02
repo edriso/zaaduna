@@ -16,11 +16,10 @@
  * the bot to be a channel admin with "Post messages" + "Delete messages".
  */
 import { Bot, type Context } from 'grammy';
+import { initState, post } from 'telegram-broadcast-kit';
 import { config } from '../src/config';
 import { runSchedule } from '../src/scheduler';
 import { schedules } from '../src/schedules';
-import { initState } from '../src/lib/state';
-import { postToChannel } from '../src/lib/post';
 
 const bot = new Bot<Context>(config.botToken);
 
@@ -49,9 +48,12 @@ async function main() {
   // Session banner, sent directly (not via runSchedule) so it isn't
   // tracked or auto-deleted — it marks this preview session in the
   // scrollback. Old banners pile up by design; delete by hand.
-  const bannerId = await postToChannel(bot, '🧪 رسائل اختبار للبوت، يمكنك حذفها بعد المعاينة.', {
-    scheduleName: 'test-banner',
-  });
+  const bannerId = await post(
+    bot,
+    config.channelChatId,
+    '🧪 رسائل اختبار للبوت، يمكنك حذفها بعد المعاينة.',
+    { name: 'test-banner' },
+  );
   if (bannerId === null) {
     console.error('Banner send failed — aborting. Check bot admin rights (Post messages).');
     process.exit(1);

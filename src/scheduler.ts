@@ -1,18 +1,31 @@
-import cron, { type ScheduledTask } from 'node-cron';
 import type { Bot, Context } from 'grammy';
+import {
+  Scheduler,
+  pickContent,
+  post,
+  sendPoll,
+  deleteMessage,
+  getMessageIds,
+  setMessageIds,
+  logger,
+  type CronJob,
+} from 'telegram-broadcast-kit';
 import { schedules } from './schedules';
 import type { ScheduleDef } from './types';
-import { pickContent } from './lib/pick';
-import { postToChannel, sendPollToChannel, deleteChannelMessage } from './lib/post';
-import { logger } from './lib/logger';
 import { config } from './config';
-import { getMessageIds, setMessageIds } from './lib/state';
 
-const tasks: ScheduledTask[] = [];
+// The bot-specific schedule layer. The generic cron plumbing (error
+// containment, the node-cron registry) now lives in telegram-broadcast-kit;
+// this file keeps everything zaaduna-specific on top of it: dispatch on
+// `kind`, the ring-buffer cleanup, and the schedule table wiring.
+
+// One Scheduler per bot, holding the live cron tasks so they can all be
+// stopped on shutdown. Built lazily on the first startScheduler call.
+let scheduler: Scheduler | null = null;
 
 /**
  * Run one schedule and return the new message_id (or null if nothing
- * posted). Dispatches on `kind` (message → sendMessage, poll → sendPoll).
+ * posted). Dispatches on `kind` (message → post, poll → sendPoll).
  *
  * Ring buffer: each schedule keeps its last `keepLast` posts live
  * (message default 1, poll default 0 = untracked; see types.ts). Order is
@@ -49,7 +62,7 @@ export async function runSchedule(bot: Bot<Context>, def: ScheduleDef): Promise<
 
   for (const oldId of toDelete) {
     if (oldId === newId) continue; // never delete what we just posted
-    await deleteChannelMessage(bot, oldId, { scheduleName: def.name });
+    await deleteMessage(bot, config.channelChatId, oldId, { name: def.name });
   }
 
   return newId;
@@ -69,53 +82,38 @@ async function sendForKind(bot: Bot<Context>, def: ScheduleDef): Promise<number 
   if (def.kind === 'poll') {
     // `poll` may be a factory rebuilt per fire (day-of-week variants).
     const spec = typeof def.poll === 'function' ? def.poll() : def.poll;
-    return sendPollToChannel(bot, spec, { scheduleName: def.name, silent: def.silent });
+    return sendPoll(bot, config.channelChatId, spec, { name: def.name, silent: def.silent });
   }
   const text = pickContent(def.content);
   if (!text) {
     logger.warn('Schedule has no content to post, skipping', { name: def.name });
     return null;
   }
-  return postToChannel(bot, text, { scheduleName: def.name, silent: def.silent });
-}
-
-/** Wrap a schedule run with logging + error containment (node-cron does
- *  not reliably catch rejected promises across versions). */
-function trackedJob(bot: Bot<Context>, def: ScheduleDef): () => Promise<void> {
-  return async () => {
-    logger.info('Schedule firing', { name: def.name, kind: def.kind });
-    try {
-      await runSchedule(bot, def);
-    } catch (err) {
-      logger.error('Schedule failed', { name: def.name, error: String(err) });
-    }
-  };
+  return post(bot, config.channelChatId, text, { name: def.name, silent: def.silent });
 }
 
 /**
- * Register every schedule with node-cron. An invalid cron is logged and
- * skipped; the rest still run. Returns the count registered.
+ * Register every schedule with the kit's Scheduler. The kit validates each
+ * cron (an invalid one is logged and skipped, so a single typo never takes
+ * the whole bot down) and wraps every fire in runJob for error containment.
+ * Returns the count registered.
  */
 export function startScheduler(bot: Bot<Context>): number {
-  for (const def of schedules) {
-    if (!cron.validate(def.cron)) {
-      logger.error('Invalid cron expression, skipping schedule', {
-        name: def.name,
-        cron: def.cron,
-      });
-      continue;
-    }
-    const task = cron.schedule(def.cron, trackedJob(bot, def), {
-      timezone: config.timezone,
-    });
-    tasks.push(task);
-  }
-  logger.info('Scheduler started', { registered: tasks.length, timezone: config.timezone });
-  return tasks.length;
+  scheduler = new Scheduler(config.timezone);
+  const jobs: CronJob[] = schedules.map((def) => ({
+    name: def.name,
+    cron: def.cron,
+    // Each fire goes through the SAME runSchedule the /admin_run path uses;
+    // runJob (inside the Scheduler) contains a thrown/rejected tick. The
+    // Scheduler ignores the returned id, so the wrapper resolves to void.
+    run: async () => {
+      await runSchedule(bot, def);
+    },
+  }));
+  return scheduler.start(jobs);
 }
 
 export function stopScheduler(): void {
-  for (const task of tasks) task.stop();
-  tasks.length = 0;
-  logger.info('Scheduler stopped');
+  scheduler?.stop();
+  scheduler = null;
 }

@@ -1,6 +1,6 @@
 import { Bot, Context } from 'grammy';
+import { logger } from 'telegram-broadcast-kit';
 import { config } from './config';
-import { logger } from './lib/logger';
 import { schedules, findSchedule } from './schedules';
 import { runSchedule } from './scheduler';
 

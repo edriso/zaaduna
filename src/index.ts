@@ -1,9 +1,7 @@
 import { config } from './config';
 import { bot, setBotCommands } from './bot';
 import { startScheduler, stopScheduler } from './scheduler';
-import { startHealthServer } from './health';
-import { logger } from './lib/logger';
-import { initState } from './lib/state';
+import { startHealthServer, logger, initState } from 'telegram-broadcast-kit';
 
 async function main() {
   logger.info('Channel bot starting...', {

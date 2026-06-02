@@ -13,9 +13,9 @@
  * to fail fast on a bad token / chat id.
  */
 import { Bot, type Context } from 'grammy';
+import { post } from 'telegram-broadcast-kit';
 import { config } from '../src/config';
 import { welcomeMessage } from '../src/content/welcome';
-import { postToChannel } from '../src/lib/post';
 
 const bot = new Bot<Context>(config.botToken);
 const messageIdArg = process.argv[2];
@@ -55,7 +55,7 @@ async function main() {
       process.exit(1);
     }
   } else {
-    const id = await postToChannel(bot, welcomeMessage, { scheduleName: 'welcome' });
+    const id = await post(bot, config.channelChatId, welcomeMessage, { name: 'welcome' });
     if (id === null) {
       console.error('Post failed. Check bot admin rights (Post messages).');
       process.exit(1);
