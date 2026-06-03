@@ -33,3 +33,12 @@ export const welcomeMessage = `السلام عليكم ورحمة الله وب�
 🌿 إن انتفعت بها فلا تنسانا من دعائك، وانشرها لإخوانك؛ فالدالُّ على الخيرِ كفاعلِه.
 
 اللهم اجعلها زادًا لنا ولكم إلى يوم نلقاك، وتقبّلها منّا خالصةً لوجهك الكريم.`;
+
+/**
+ * Inline URL buttons shown under the pinned welcome. The channel's du'a
+ * follow «حصن المسلم» (see line above); this is that reference made
+ * tappable. Applied by scripts/post-welcome.ts. Each inner array is one row.
+ */
+export const welcomeButtons: readonly (readonly { text: string; url: string }[])[] = [
+  [{ text: '📖 حصن المسلم', url: 'https://www.hisnmuslim.com' }],
+];

@@ -12,13 +12,23 @@
  * time, so edit-in-place keeps updates silent. Preflights with getChat()
  * to fail fast on a bad token / chat id.
  */
-import { Bot, type Context } from 'grammy';
+import { Bot, InlineKeyboard, type Context } from 'grammy';
 import { post } from 'telegram-broadcast-kit';
 import { config } from '../src/config';
-import { welcomeMessage } from '../src/content/welcome';
+import { welcomeMessage, welcomeButtons } from '../src/content/welcome';
 
 const bot = new Bot<Context>(config.botToken);
 const messageIdArg = process.argv[2];
+
+/** Build the inline URL keyboard shown under the welcome (see welcome.ts). */
+function welcomeKeyboard(): InlineKeyboard {
+  const kb = new InlineKeyboard();
+  welcomeButtons.forEach((row, i) => {
+    for (const b of row) kb.url(b.text, b.url);
+    if (i < welcomeButtons.length - 1) kb.row();
+  });
+  return kb;
+}
 
 async function main() {
   try {
@@ -40,7 +50,10 @@ async function main() {
       process.exit(1);
     }
     try {
-      await bot.api.editMessageText(config.channelChatId, messageId, welcomeMessage);
+      // One call updates text + buttons; the pin and silence are preserved.
+      await bot.api.editMessageText(config.channelChatId, messageId, welcomeMessage, {
+        reply_markup: welcomeKeyboard(),
+      });
       console.log(`Edited welcome message ${messageId} in ${config.channelChatId}.`);
       console.log('The pin (if any) stayed; no notification fired.');
     } catch (err) {
@@ -59,6 +72,14 @@ async function main() {
     if (id === null) {
       console.error('Post failed. Check bot admin rights (Post messages).');
       process.exit(1);
+    }
+    // post() (the kit) sends text only; attach the buttons as a follow-up edit.
+    try {
+      await bot.api.editMessageReplyMarkup(config.channelChatId, id, {
+        reply_markup: welcomeKeyboard(),
+      });
+    } catch (err) {
+      console.error('Note: posted, but failed to attach buttons:', String(err));
     }
     console.log(`Posted welcome to ${config.channelChatId} as message ${id}.`);
     console.log('Next: pin this message in the channel (⋮ → Pin).');

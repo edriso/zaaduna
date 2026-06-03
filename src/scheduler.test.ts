@@ -24,10 +24,11 @@ function fakeBot() {
   const sendMessage = vi.fn().mockResolvedValue({ message_id: 11 });
   const sendPoll = vi.fn().mockResolvedValue({ message_id: 22 });
   const deleteMessage = vi.fn().mockResolvedValue(true);
+  const editMessageReplyMarkup = vi.fn().mockResolvedValue(true);
   const bot = {
-    api: { sendMessage, sendPoll, deleteMessage },
+    api: { sendMessage, sendPoll, deleteMessage, editMessageReplyMarkup },
   } as unknown as Bot<Context>;
-  return { bot, sendMessage, sendPoll, deleteMessage };
+  return { bot, sendMessage, sendPoll, deleteMessage, editMessageReplyMarkup };
 }
 
 // Wipe the in-memory pointer store between cases so one test's posts
@@ -235,6 +236,48 @@ describe('runSchedule replace-on-next-fire (messages only)', () => {
     expect(deletedIds).toEqual([1, 2]);
     expect(getLastMessageId('morning_azkar')).toBe(3);
     expect(getLastMessageId('evening_azkar')).toBe(4);
+  });
+});
+
+describe('runSchedule inline buttons', () => {
+  it('attaches buttons via editMessageReplyMarkup for a schedule that has them', async () => {
+    const { bot, editMessageReplyMarkup } = fakeBot();
+    const def = findSchedule('pre_sleep')!;
+    expect(def.kind).toBe('message');
+
+    const id = await runSchedule(bot, def);
+
+    expect(id).toBe(11);
+    expect(editMessageReplyMarkup).toHaveBeenCalledTimes(1);
+    // Called with (chatId, the just-posted messageId, { reply_markup }).
+    const [, messageId, other] = editMessageReplyMarkup.mock.calls[0];
+    expect(messageId).toBe(11);
+    // pre_sleep has two rows (المُلك, then السجدة); the keyboard mirrors that.
+    expect(other.reply_markup.inline_keyboard).toHaveLength(2);
+    expect(other.reply_markup.inline_keyboard[0][0].url).toContain('quran.com/67');
+  });
+
+  it('does not touch editMessageReplyMarkup for a schedule without buttons', async () => {
+    const { bot, editMessageReplyMarkup } = fakeBot();
+    const def = findSchedule('morning_azkar')!;
+    await runSchedule(bot, def);
+    expect(editMessageReplyMarkup).not.toHaveBeenCalled();
+  });
+
+  it('a failed button attach is non-fatal: id still returned, pointer advanced', async () => {
+    const sendMessage = vi.fn().mockResolvedValue({ message_id: 77 });
+    const deleteMessage = vi.fn().mockResolvedValue(true);
+    const editMessageReplyMarkup = vi.fn().mockRejectedValue(new Error('boom'));
+    const bot = {
+      api: { sendMessage, sendPoll: vi.fn(), deleteMessage, editMessageReplyMarkup },
+    } as unknown as Bot<Context>;
+    const def = findSchedule('friday_sunnah')!;
+
+    const id = await runSchedule(bot, def);
+
+    // The post and the ring-buffer pointer succeed even though buttons failed.
+    expect(id).toBe(77);
+    expect(getLastMessageId('friday_sunnah')).toBe(77);
   });
 });
 

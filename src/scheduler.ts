@@ -1,4 +1,4 @@
-import type { Bot, Context } from 'grammy';
+import { InlineKeyboard, type Bot, type Context } from 'grammy';
 import {
   Scheduler,
   pickContent,
@@ -11,7 +11,7 @@ import {
   type CronJob,
 } from 'telegram-broadcast-kit';
 import { schedules } from './schedules';
-import type { ScheduleDef } from './types';
+import type { MessageSchedule, ScheduleDef } from './types';
 import { config } from './config';
 
 // The bot-specific schedule layer. The generic cron plumbing (error
@@ -89,7 +89,54 @@ async function sendForKind(bot: Bot<Context>, def: ScheduleDef): Promise<number 
     logger.warn('Schedule has no content to post, skipping', { name: def.name });
     return null;
   }
-  return post(bot, config.channelChatId, text, { name: def.name, silent: def.silent });
+  const id = await post(bot, config.channelChatId, text, {
+    name: def.name,
+    silent: def.silent,
+    // HTML for the long azkar (bold title); undefined = plain text for
+    // everything else. Content is pre-escaped by azkarHtml().
+    parseMode: def.parseMode,
+  });
+  if (id !== null && def.buttons?.length) {
+    await attachButtons(bot, id, def.buttons, def.name);
+  }
+  return id;
+}
+
+/**
+ * Attach inline URL buttons to a just-posted channel message. Done as a
+ * follow-up edit (not part of the send) so the kit's post() stays the single
+ * place that sends + logs + returns the id. Channels only allow inline
+ * keyboards; URL buttons cost nothing against the 4096-char limit. Non-fatal:
+ * a failure is logged and the (button-less) message still stands, so a hiccup
+ * here never costs the post or the ring-buffer cleanup.
+ */
+async function attachButtons(
+  bot: Bot<Context>,
+  messageId: number,
+  rows: NonNullable<MessageSchedule['buttons']>,
+  name: string,
+): Promise<void> {
+  try {
+    const keyboard = new InlineKeyboard();
+    rows.forEach((row, i) => {
+      for (const b of row) keyboard.url(b.text, b.url);
+      if (i < rows.length - 1) keyboard.row();
+    });
+    await bot.api.editMessageReplyMarkup(config.channelChatId, messageId, {
+      reply_markup: keyboard,
+    });
+    logger.info('Attached buttons to channel message', {
+      name,
+      messageId,
+      buttons: rows.flat().length,
+    });
+  } catch (err) {
+    logger.warn('Failed to attach buttons to channel message', {
+      name,
+      messageId,
+      error: String(err),
+    });
+  }
 }
 
 /**

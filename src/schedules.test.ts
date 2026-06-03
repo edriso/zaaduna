@@ -3,6 +3,7 @@ import cron from 'node-cron';
 import { schedules, findSchedule } from './schedules';
 import { MIN_CLOSE_HOURS, MAX_CLOSE_HOURS, rtlIsolate } from 'telegram-broadcast-kit';
 import { buildNightReviewPoll } from './content/poll';
+import { renderedText } from './content/format';
 import { hijriDate } from './lib/hijri';
 import type { PollSpec } from './types';
 
@@ -66,7 +67,45 @@ describe('message schedules', () => {
       expect(items.length, `${s.name} has no content`).toBeGreaterThan(0);
       for (const text of items) {
         expect(text.trim().length, `${s.name} has empty content`).toBeGreaterThan(0);
-        expect(text.length, `${s.name} message too long`).toBeLessThanOrEqual(MAX_MESSAGE_CHARS);
+        // Telegram's 4096 limit is on the RENDERED text, not the raw markup:
+        // HTML tags (the azkar bold title) do not count. Measure what
+        // Telegram measures. renderedText is a no-op on plain content.
+        expect(renderedText(text).length, `${s.name} message too long`).toBeLessThanOrEqual(
+          MAX_MESSAGE_CHARS,
+        );
+      }
+    }
+  });
+});
+
+describe('message buttons (inline URL keyboard)', () => {
+  const withButtons = schedules.filter(
+    (s): s is typeof s & { kind: 'message' } => s.kind === 'message' && !!s.buttons?.length,
+  );
+
+  it('at least the pre_sleep and friday_sunnah messages carry buttons', () => {
+    const names = withButtons.map((s) => s.name);
+    expect(names).toContain('pre_sleep');
+    expect(names).toContain('friday_sunnah');
+  });
+
+  it('every button has non-empty text and an https URL', () => {
+    for (const s of withButtons) {
+      if (s.kind !== 'message') continue; // narrow for TS
+      for (const row of s.buttons!) {
+        expect(row.length, `${s.name} has an empty button row`).toBeGreaterThan(0);
+        for (const b of row) {
+          expect(b.text.trim().length, `${s.name} button text empty`).toBeGreaterThan(0);
+          // Telegram inline-button text limit is 64; keep a margin.
+          expect(b.text.length, `${s.name} button text too long: ${b.text}`).toBeLessThanOrEqual(
+            64,
+          );
+          expect(b.url, `${s.name} button URL not https: ${b.url}`).toMatch(/^https:\/\//);
+        }
+      }
+      // Telegram allows up to 8 buttons per row; we stay well under.
+      for (const row of s.buttons!) {
+        expect(row.length, `${s.name} too many buttons in a row`).toBeLessThanOrEqual(8);
       }
     }
   });

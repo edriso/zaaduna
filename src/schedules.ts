@@ -4,6 +4,7 @@ import { preSleepReminder } from './content/preSleep';
 import { fridaySunnah } from './content/fridaySunnah';
 import { fastingReminder } from './content/fasting';
 import { buildNightReviewPoll } from './content/poll';
+import { azkarHtml } from './content/format';
 import { fastForbiddenTomorrow } from './lib/hijri';
 import { config } from './config';
 import type { ScheduleDef } from './types';
@@ -42,7 +43,10 @@ export const schedules: ScheduleDef[] = [
     // 05:30 Cairo: inside the Fajr→sunrise window all year (sunrise
     // swings ~5:55 June to ~6:45 December). 06:00 drifts past it in summer.
     cron: '30 5 * * *',
-    content: morningAzkar,
+    // HTML only for a bold title; body stays normal-size text. azkarHtml
+    // escapes the text; see content/format.ts.
+    content: azkarHtml(morningAzkar),
+    parseMode: 'HTML',
     description: 'أذكار الصباح، كل يوم 5:30 ص (داخل وقت الذكر بين الفجر وطلوع الشمس طوال السنة).',
   },
   {
@@ -52,6 +56,10 @@ export const schedules: ScheduleDef[] = [
     // time is forgiving; what matters is bundling with the morning azkar.
     cron: '32 5 * * 5',
     content: fridaySunnah,
+    // One-tap link to read the sura the message urges (السنة قراءتها يوم
+    // الجمعة). The bot references Quran, never reproduces it — the button
+    // is that reference made tappable.
+    buttons: [[{ text: '📖 اقرأ سورة الكهف', url: 'https://quran.com/18?readingMode=arabic' }]],
     // Silent: rides 2 min after morning_azkar, so Friday still gets just
     // the one morning ping.
     silent: true,
@@ -66,7 +74,9 @@ export const schedules: ScheduleDef[] = [
     // valid year-round; don't move it to 16:30 — that falls before Asr in
     // summer (Cairo Asr reaches ~17:00 at the solstice).
     cron: '0 17 * * *',
-    content: eveningAzkar,
+    // HTML bold title, same as morning_azkar.
+    content: azkarHtml(eveningAzkar),
+    parseMode: 'HTML',
     description: 'أذكار المساء، كل يوم 5:00 م. الأفضل قراءتها بين العصر والمغرب.',
   },
   {
@@ -87,7 +97,17 @@ export const schedules: ScheduleDef[] = [
     name: 'pre_sleep',
     kind: 'message',
     cron: '43 21 * * *',
-    content: preSleepReminder,
+    // HTML bold title, same as morning_azkar.
+    content: azkarHtml(preSleepReminder),
+    parseMode: 'HTML',
+    // One-tap links to the suras this message names. Quran is referenced,
+    // not reproduced — these buttons are the reference. المُلك on its own row
+    // (most emphasised: تشفع لصاحبها). الكافرون is omitted on purpose: it is
+    // short and universally memorised, so a link adds nothing.
+    buttons: [
+      [{ text: '📖 سورة المُلك', url: 'https://quran.com/67?readingMode=arabic' }],
+      [{ text: 'سورة السجدة', url: 'https://quran.com/32?readingMode=arabic' }],
+    ],
     // Silent: part of the bedtime session; the night poll (9:45) carries
     // the single bedtime ping and sits just below this message.
     silent: true,

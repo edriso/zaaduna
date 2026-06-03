@@ -67,6 +67,25 @@ interface BaseSchedule {
 export interface MessageSchedule extends BaseSchedule {
   kind: 'message';
   content: string | readonly string[];
+  /**
+   * Opt into a Telegram parse_mode for THIS message. Omitted (the default)
+   * means plain text, the Arabic-safe norm the whole bot uses. The three
+   * long azkar set 'HTML' for a bold title only (body stays normal-size);
+   * their content is built by azkarHtml(), which escapes & < >.
+   * See content/format.ts and the "no parse_mode" note in CLAUDE.md.
+   */
+  parseMode?: 'HTML' | 'MarkdownV2' | 'Markdown';
+  /**
+   * Optional inline-keyboard URL buttons shown under the message. Each inner
+   * array is one row of buttons. Channels only allow inline keyboards, and
+   * URL buttons cost nothing against the 4096-char limit. Used to link the
+   * suras the message references (e.g. «اقرأ سورة المُلك») — the bot points
+   * to Quran, it never reproduces it. Attached right after posting via
+   * editMessageReplyMarkup, so the kit's post() stays the single send path; a
+   * failure is logged and non-fatal (the button-less message still stands).
+   * See scheduler.ts#attachButtons.
+   */
+  buttons?: readonly (readonly { text: string; url: string }[])[];
 }
 
 /** Sends one anonymous poll. `poll` may be a fixed spec or a factory

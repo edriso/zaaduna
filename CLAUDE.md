@@ -24,7 +24,7 @@ zaaduna/
 │   ├── scheduler.ts    runSchedule() dispatch + ring-buffer (cron registry from the kit)
 │   ├── schedules.ts    THE EDIT POINT: the schedule list + findSchedule
 │   ├── types.ts        ScheduleDef union + PollSpec (no import cycle)
-│   ├── content/        Arabic content modules + poll spec + welcome.ts
+│   ├── content/        Arabic content modules + poll spec + welcome.ts + format.ts (azkar HTML)
 │   └── lib/            hijri (Umm al-Qura no-fast days)
 ├── scripts/
 │   ├── send-test.ts       Manual dev sender (not imported by the app)
@@ -129,9 +129,37 @@ refer to those kit modules. To change shared code, edit the kit and ship a new t
   the reader's own local Eid knowledge) is the backstop for the rare
   opposite drift — the reminder itself stays clean year-round, no
   per-fire disclaimer. We never trust the calculation alone for a ruling.
-- **Channel text uses NO `parse_mode`.** Arabic du'a/Quran references
-  contain `* _ ( ) <` etc. that Markdown/HTML would 400 on. Plain text
-  renders Arabic + emoji perfectly. Deliberate simplicity-over-styling.
+- **Channel text uses NO `parse_mode`, with one tiny carve-out.** Arabic
+  du'a/Quran references contain `* _ ( ) <` etc. that Markdown/HTML would
+  400 on. Plain text renders Arabic + emoji perfectly, so it is the
+  default for every post. The single exception is the three long azkar
+  (morning / evening / pre-sleep): they use `parse_mode: 'HTML'` for a
+  **bold title** only — the body stays normal-size plain text. This is safe
+  because (a) in HTML mode only `& < >` are special and the azkar text has
+  none, and (b) `azkarHtml` (`content/format.ts`) runs every part through
+  `escapeHtml`, so a future edit that adds one of those characters still
+  can't 400. HTML tags do NOT count toward the 4096-char limit — the limit
+  is on the rendered text — so the schedule test measures `renderedText(...)`,
+  not the raw markup. Everything else stays plain.
+  - We tried an **expandable blockquote** to collapse the long list in the
+    feed, but Telegram renders blockquote text in a smaller, condensed font
+    and the Bot API has no font-size control. Readable normal-size du'a beat
+    the tidy-but-tiny block, so we dropped it. The Arabic-Indic numbering
+    (`١. ٢. ٣.`) carries the readability instead.
+- **Inline URL buttons link the referenced suras.** The bot references
+  Quran, never reproduces it, so a one-tap link is the natural action:
+  `pre_sleep` carries «سورة المُلك / السجدة / الكافرون» (quran.com),
+  `friday_sunnah` «سورة الكهف», and the pinned welcome «حصن المسلم».
+  Buttons live on the schedule entry (`types.ts` → `MessageSchedule.buttons`,
+  rows of `{ text, url }`) and on `welcome.ts` → `welcomeButtons`. Channels
+  only allow inline keyboards, and URL buttons cost nothing against the 4096
+  limit. The kit's `post()` does not take `reply_markup`, so we POST via the
+  kit then attach the keyboard with `editMessageReplyMarkup`
+  (`scheduler.ts#attachButtons`; the welcome script does the same). That keeps
+  `post()` the single send path; a failed attach is logged and non-fatal (the
+  button-less message still stands). No extra admin right is needed — the bot
+  edits its own message. If you want this shared across the other bots, move
+  the `reply_markup` passthrough into `telegram-broadcast-kit` and ship a tag.
 - **Poll options are `InputPollOption` objects.** Bot API 7.3+ changed
   `options` from strings to `{ text }[]`; `lib/post.ts` does the map.
 - **Poll text is bidi-isolated (`rtlIsolate`).** Each option + the
@@ -180,6 +208,10 @@ in the same file or a schedule split.
    catch it.
 3. Times / new schedules → edit `src/schedules.ts`.
    The framework code does not need to change.
+4. Sura/reference links under a message → edit that schedule's `buttons`
+   in `src/schedules.ts` (rows of `{ text, url }`); the welcome's are in
+   `src/content/welcome.ts` → `welcomeButtons`. Use `https://` URLs and
+   keep button text short. See the inline-buttons design note above.
 
 ## Environment variables
 
@@ -240,9 +272,15 @@ parent-dir creation), `startScheduler` skipping an invalid cron,
 `resolvePort`, the `skipIf` guard (skips the post + leaves the ring
 buffer untouched), the silent-rider split (anchors ring, the Friday /
 fasting / pre-sleep riders carry `silent: true`, and `post.ts` sends
-`disable_notification` only when asked), and `lib/hijri.ts` (Umm al-Qura
-mapping; Eid/Tashreeq suppression incl. the +1 day-14 cushion; عرفة and
-ستّ من شوّال never suppressed; the poll drops «صيام» on a Tashreeq day).
+`disable_notification` only when asked), `content/format.ts` (the azkar
+HTML: bold title only, `escapeHtml`, and `renderedText` round-tripping the
+HTML back to the byte-exact plain source so the 4096 check measures what
+Telegram renders), the inline-button specs (every button has non-empty
+text and an `https://` URL; `runSchedule` attaches them via
+`editMessageReplyMarkup` only when present and a failed attach is
+non-fatal), and `lib/hijri.ts` (Umm al-Qura mapping; Eid/Tashreeq
+suppression incl. the +1 day-14 cushion; عرفة and ستّ من شوّال never
+suppressed; the poll drops «صيام» on a Tashreeq day).
 The count is intentionally not stated here so it never goes stale.
 
 `pnpm check` runs `typecheck` + `format:check` + `test` — the same gate
