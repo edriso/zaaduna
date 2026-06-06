@@ -5,13 +5,16 @@
  * kit: pickForDay، وschedules.ts: akhlaq_reminder بـ selection: 'daily'
  * و keepLast: 0 فلا يُحذَف منها شيء، بل تبقى أرشيفًا يُتصفَّح ويُنشَر).
  *
- * Repeat cadence: pickForDay rotates by day-of-year, so any item reappears
- * about every `length` days — here ~6 weeks — never sooner than ~5 weeks
- * even across the year-boundary phase reset. That worst-case gap is
- * surprisingly sensitive to the pool size (40 or 45 items would collapse it
- * to ~5 days!), so the size is chosen deliberately and pinned by a min-gap
- * test in akhlaq.test.ts. If you grow/shrink the pool, run the test: a red
- * min-gap means the new size landed badly — nudge it by ±1 and re-check.
+ * How often an item repeats (READ THIS before changing the list size):
+ * each day the bot shows item number (day-of-the-year mod list-length). So
+ * normally an item comes back every `length` days (about 6 weeks with this
+ * list). The one catch: on Jan 1 the day counter resets to 1, which can make
+ * a few items come back a bit sooner. How much sooner depends a lot on the
+ * list size: 41 items keeps the shortest gap at 37 days, but 40 or 45 items
+ * would drop it to about 5 days. So the count is picked on purpose. A test
+ * in akhlaq.test.ts measures the shortest gap and fails if a new size is bad.
+ * If you add or remove items and that test goes red, change the count by 1
+ * and run the test again until it passes.
  *
  * أربعةُ روافد، يميّزها الإيموجي في صدر العنوان فيتنوّع المعروضُ يومًا
  * بعد يوم:

@@ -86,23 +86,21 @@ refer to those kit modules. To change shared code, edit the kit and ship a new t
   other admins) is never tracked here, and therefore never deleted.
   See `scheduler.ts#runSchedule` + `lib/state.ts`.
 
-- **Daily-rotation evergreen library (`selection: 'daily'` + `keepLast:
-0`).** Most posts are fixed or repeating, but `akhlaq_reminder` is
-  different: it walks a growing pool of unique vignettes (أخلاق المسلم،
-  هَدْي النبي ﷺ، الصحابة، حِكَم جامعة) one item a day. Two flags make
-  this work together:
-  - `selection: 'daily'` (`types.ts` → `MessageSchedule`) picks by
-    day-of-year via the kit's `pickForDay`, computed in `config.timezone`
-    (never `Date.getDay()`): the same calendar day always shows the same
-    item, two consecutive days never repeat, and the whole pool is shown
-    before any repeat. It is **stateless**, so it is restart-safe by
-    construction — no pointer file needed, unlike the ring buffer.
-  - `keepLast: 0` opts the schedule OUT of the ring buffer, so nothing is
-    ever deleted. The channel grows a browsable, shareable archive instead
-    of throwing yesterday's reflection away (the opposite of the azkar,
-    which keep one live copy). `scheduler.ts#sendForKind` branches on
-    `selection`; `content/akhlaq.ts` holds the pool; a content test pins
-    the no-consecutive-repeat property over a full year.
+- **Daily-rotation growing library (`selection: 'daily'` + `keepLast:
+0`).** Most posts are fixed or repeating. `akhlaq_reminder` is different:
+  it has a big list of short posts (أخلاق المسلم، هَدْي النبي ﷺ، الصحابة،
+  حِكَم جامعة) and shows one new item each day. Two settings make this work:
+  - `selection: 'daily'` (`types.ts` → `MessageSchedule`) picks the item by
+    day-of-the-year using the kit's `pickForDay`, in `config.timezone` (never
+    `Date.getDay()`). Result: the same date always shows the same item, two
+    days in a row never show the same one, and the whole list is shown before
+    any repeat. It keeps **no saved state**, so it just works after a restart
+    (unlike the ring buffer, which needs the pointer file).
+  - `keepLast: 0` turns the ring-buffer cleanup OFF, so nothing is ever
+    deleted. The channel keeps every post and slowly builds a library people
+    can scroll and share (the opposite of the azkar, which keep one copy).
+    The code is in `scheduler.ts#sendForKind` (it checks `selection`);
+    `content/akhlaq.ts` holds the list; a test checks two days never repeat.
 
 - **One ping per session (`silent` riders).** What makes people mute a
   channel is the number of separate notification moments, not the message
@@ -231,23 +229,25 @@ authentication dispute even if one grader passes them (the «أدِّ الأما
 … ولا تخن من خانك» wording was dropped for exactly this — Albani graded it
 sahih but al-Shafiʿi, Abu Hatim, Ibn al-Jawzi and Ibn Hajar weakened it).
 
-**Pool size is not just about volume — it sets the repeat interval, and
-it does so non-obviously.** `pickForDay` indexes by day-of-year, so an
-item normally reappears every `length` days, but the year-boundary phase
-reset can shorten that gap, and how much depends sharply on the size:
-41 items → 37-day minimum gap, but 40 or 45 → a jarring ~5-day gap. The
-pool is currently **41** (a deliberate, well-spaced value); a min-gap test
-in `akhlaq.test.ts` fails if a resize lands on a bad value. Keep it ≥ 28,
-and if you change it, run the tests — a red min-gap means nudge by ±1.
+**The list size also controls how soon a post repeats, in a non-obvious
+way.** `pickForDay` picks by day-of-the-year, so a post normally comes back
+every `length` days. But on Jan 1 the day counter resets, which can make a
+few posts come back sooner, and how much sooner depends a lot on the size:
+41 items keeps the shortest gap at 37 days, but 40 or 45 items drop it to
+about 5 days. The list is currently **41** (chosen on purpose). A test in
+`akhlaq.test.ts` measures the shortest gap and fails on a bad size. Keep the
+list at 28 or more, and if you change the count, run the tests; if the
+min-gap test goes red, change the count by 1 and try again.
 
 ## How to change what it posts
 
 1. Message text → edit the file in `src/content/`.
-   - The daily akhlaq vignettes → edit the `akhlaqReminders` array in
-     `src/content/akhlaq.ts`. Each entry is one vignette (stream emoji +
-     title, then body), with its takhreej in the comment above it. Order
-     is interleaved so the streams alternate day to day; keep the pool
-     ≥ 28 and every marfūʿ text sahih/hasan. See the authenticity note.
+   - The daily akhlaq items → edit the `akhlaqReminders` array in
+     `src/content/akhlaq.ts`. Each entry is one short post (stream emoji +
+     title, then body), with its source in the comment above it. The items
+     are mixed so the four kinds (خُلُق / هَدْي النبي ﷺ / صحابة / حِكَم)
+     take turns day to day; keep the list at 28+ and every saying about the
+     Prophet ﷺ sahih or hasan. See the authenticity note above.
 2. The poll → edit `src/content/poll.ts` (stay anonymous + multi;
    keep any emoji at the **end** of each option/question and leave a
    little margin under 100 chars — `rtlIsolate` adds 2; see below).

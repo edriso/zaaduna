@@ -153,12 +153,14 @@ pnpm send-test
 Everything lives in source. No database; restart (or redeploy) to apply.
 
 - **Message wording:** edit the matching file in `src/content/`.
-- **The daily akhlaq library:** edit the `akhlaqReminders` pool in
-  `src/content/akhlaq.ts`. It rotates one vignette a day (deterministic,
-  no repeats until the pool is exhausted) and nothing is ever deleted, so
-  the channel keeps a growing, browsable archive. Every saying attributed
-  to the Prophet ﷺ must be sahih or hasan with its takhreej in the comment
-  above it — see the authenticity note in the file header.
+- **The daily akhlaq library:** edit the `akhlaqReminders` list in
+  `src/content/akhlaq.ts`. The bot shows one short post a day; the same date
+  always shows the same one, and the whole list is shown before any repeat.
+  Nothing is ever deleted, so the channel slowly builds a library people can
+  scroll and share. Every saying attributed to the Prophet ﷺ must be sahih
+  or hasan, with its source in the comment above it. The file header explains
+  the rules and how the list size affects how soon a post repeats; read it
+  before adding or removing items.
 - **The poll:** edit `src/content/poll.ts` (the question and its
   options). Keep it anonymous and multiple-answer, that is the whole
   point. The list is built at fire time so Monday and Thursday nights

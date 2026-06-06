@@ -45,7 +45,7 @@ describe('akhlaqReminders', () => {
 
   it('daily rotation never repeats on consecutive days (4 years, incl. leap 2028)', () => {
     // Walk 4 real years starting 2026-01-01 (crosses the 2028 leap day and
-    // three year boundaries) so the day-of-year phase reset is exercised.
+    // three Jan-1 day-counter resets), so the tricky boundaries are covered.
     let day = new Date('2026-01-01T16:58:00Z');
     for (let i = 0; i < 365 * 4 + 1; i++) {
       const next = new Date(day.getTime() + 86_400_000);
@@ -56,14 +56,13 @@ describe('akhlaqReminders', () => {
     }
   });
 
-  it('no vignette repeats within ~3 weeks (a reasonable spacing all year)', () => {
-    // pickForDay rotates by day-of-year, so the gap between two showings of
-    // the same item is the pool size in days — EXCEPT at a year boundary,
-    // where the phase reset can shorten it. That shortened gap is very
-    // sensitive to the pool size (e.g. 40 or 45 items collapse it to ~5
-    // days; 41 keeps it at 37). This test pins a healthy minimum so a future
-    // resize can't silently make the channel feel repetitive. If it fails,
-    // the pool size landed on a bad value — nudge it by ±1 and re-check.
+  it('no item repeats within ~3 weeks (a reasonable spacing all year)', () => {
+    // The gap between two showings of the same item is normally the list
+    // size in days, but on Jan 1 the day counter resets, which can shorten
+    // it. How short depends a lot on the list size (e.g. 40 or 45 items drop
+    // it to ~5 days; 41 keeps it at 37). This test pins a healthy minimum so
+    // a future size change can't quietly make the channel feel repetitive.
+    // If it fails, the list size is a bad value: change it by 1 and re-run.
     const MIN_GAP_DAYS = 21;
     const start = Date.UTC(2026, 0, 1, 13, 58);
     const lastSeen: Record<string, number> = {};

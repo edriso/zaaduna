@@ -100,9 +100,9 @@ describe('runSchedule daily selection (akhlaq library)', () => {
     expect(getLastMessageId('akhlaq_reminder')).toBeUndefined();
   });
 
-  it('is deterministic per day: two fires the same day post identical text', async () => {
-    // selection 'daily' picks by day-of-year, so repeated fires within one
-    // day send the same vignette (idempotent), unlike a random pick.
+  it('same day, two fires: both post the same text', async () => {
+    // selection 'daily' picks by day-of-the-year, so running it twice on the
+    // same day sends the same item (not a fresh random one each time).
     const { bot, sendMessage } = fakeBot();
     const def = findSchedule('akhlaq_reminder')!;
 
