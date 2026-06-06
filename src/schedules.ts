@@ -2,6 +2,7 @@ import { morningAzkar } from './content/morningAzkar';
 import { eveningAzkar } from './content/eveningAzkar';
 import { preSleepReminder } from './content/preSleep';
 import { fridaySunnah } from './content/fridaySunnah';
+import { akhlaqReminders } from './content/akhlaq';
 import { fastingReminder } from './content/fasting';
 import { buildNightReviewPoll } from './content/poll';
 import { azkarHtml } from './content/format';
@@ -28,8 +29,13 @@ export type { ScheduleDef } from './types';
  * carry `silent: true` (Telegram disable_notification) so each session
  * rings exactly once: a morning ping (morning azkar), an evening ping
  * (evening azkar), and a bedtime ping (the night poll). That is ≤3
- * interruptions a day; the Friday/fasting riders still arrive, just
+ * interruptions a day; the akhlaq/Friday/fasting riders still arrive, just
  * without a buzz.
+ *
+ * In the evening window the akhlaq reminder fires FIRST (16:58, silent),
+ * then the evening azkar rings (17:00) and sits newest at the bottom. So
+ * the reader opens on the audible azkar and finds the day's akhlaq vignette
+ * one message above it — a short reflection, then the dhikr to act on.
  *
  * In the bedtime window the poll fires LAST (fasting → pre-sleep → poll),
  * so it sits newest at the bottom; its last option «سورة المُلك وأذكار
@@ -65,6 +71,28 @@ export const schedules: ScheduleDef[] = [
     silent: true,
     description:
       'سننُ الجمعة (الطهارة والزينة، التبكير، الكهف، الصلاة على النبي)، الجمعة 5:32 ص (صامت، مع أذكار الصباح).',
+  },
+  {
+    name: 'akhlaq_reminder',
+    kind: 'message',
+    // 16:58 Cairo, 2 min before evening_azkar (one evening ping). A calm
+    // pre-Maghrib reflection; exact time is forgiving, what matters is
+    // bundling it onto the evening azkar session.
+    cron: '58 16 * * *',
+    content: akhlaqReminders,
+    // Deterministic day-of-year rotation: the same vignette on a given
+    // date, never the same one two days running, and the whole pool is
+    // shown before any repeat (kit's pickForDay; see scheduler.ts).
+    selection: 'daily',
+    // Keep every item live (do NOT replace-on-next-fire). Each akhlaq
+    // vignette is unique, evergreen content, so the channel grows a
+    // browsable, shareable library instead of throwing yesterday's away.
+    keepLast: 0,
+    // Silent: rides 2 min before evening_azkar, so the evening still gets
+    // just the one ping (the azkar, which sits newest below it).
+    silent: true,
+    description:
+      'وقفةٌ في أخلاق المسلم وهَدْي النبيّ ﷺ (بالتناوب اليوميّ، لا تتكرّر وقفةُ الأمس)، كل يوم 4:58 م (صامت، قبل أذكار المساء بدقيقتين). مكتبةٌ متنامية لا يُحذَف منها شيء.',
   },
   {
     name: 'evening_azkar',

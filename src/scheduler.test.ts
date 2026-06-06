@@ -84,6 +84,40 @@ describe('runSchedule dispatch', () => {
   });
 });
 
+describe('runSchedule daily selection (akhlaq library)', () => {
+  it('posts a message and, with keepLast 0, never tracks or deletes', async () => {
+    const { bot, sendMessage, sendPoll, deleteMessage } = fakeBot();
+    const def = findSchedule('akhlaq_reminder')!;
+    expect(def.kind).toBe('message');
+
+    await runSchedule(bot, def);
+    await runSchedule(bot, def);
+
+    expect(sendMessage).toHaveBeenCalledTimes(2);
+    expect(sendPoll).not.toHaveBeenCalled();
+    // keepLast 0 → the growing library is never trimmed and never tracked.
+    expect(deleteMessage).not.toHaveBeenCalled();
+    expect(getLastMessageId('akhlaq_reminder')).toBeUndefined();
+  });
+
+  it('is deterministic per day: two fires the same day post identical text', async () => {
+    // selection 'daily' picks by day-of-year, so repeated fires within one
+    // day send the same vignette (idempotent), unlike a random pick.
+    const { bot, sendMessage } = fakeBot();
+    const def = findSchedule('akhlaq_reminder')!;
+
+    await runSchedule(bot, def);
+    await runSchedule(bot, def);
+
+    // post() forwards (chatId, text, opts); text is the second arg.
+    const first = sendMessage.mock.calls[0][1];
+    const second = sendMessage.mock.calls[1][1];
+    expect(typeof first).toBe('string');
+    expect(first.trim().length).toBeGreaterThan(0);
+    expect(second).toBe(first);
+  });
+});
+
 describe('runSchedule replace-on-next-fire (messages only)', () => {
   it('first fire posts and tracks the message_id but does NOT delete anything', async () => {
     const { bot, sendMessage, deleteMessage } = fakeBot();

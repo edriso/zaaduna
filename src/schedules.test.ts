@@ -111,6 +111,40 @@ describe('message buttons (inline URL keyboard)', () => {
   });
 });
 
+describe('akhlaq_reminder (daily-rotation library)', () => {
+  const akhlaq = findSchedule('akhlaq_reminder');
+
+  it('exists as a message schedule', () => {
+    expect(akhlaq?.kind).toBe('message');
+  });
+
+  it('walks the pool by daily rotation and keeps every item live', () => {
+    // selection 'daily' + keepLast 0 is the whole design: one item a day,
+    // deterministic, and nothing is ever deleted so the channel grows a
+    // browsable library. A regression to random/replace would silently
+    // change the channel's behaviour, so pin both here.
+    if (akhlaq?.kind !== 'message') throw new Error('akhlaq_reminder must be a message');
+    expect(akhlaq.selection).toBe('daily');
+    expect(akhlaq.keepLast).toBe(0);
+  });
+
+  it('has an array content pool large enough to rotate without quick repeats', () => {
+    if (akhlaq?.kind !== 'message') throw new Error('akhlaq_reminder must be a message');
+    expect(Array.isArray(akhlaq.content)).toBe(true);
+    expect((akhlaq.content as readonly string[]).length).toBeGreaterThanOrEqual(28);
+  });
+
+  it('fires before evening_azkar so the audible azkar sits newest below it', () => {
+    const minutes = (cronExpr: string) => {
+      const [m, h] = cronExpr.split(/\s+/).map(Number);
+      return h * 60 + m;
+    };
+    const evening = findSchedule('evening_azkar');
+    expect(akhlaq && evening).toBeTruthy();
+    expect(minutes(akhlaq!.cron)).toBeLessThan(minutes(evening!.cron));
+  });
+});
+
 describe('poll schedules', () => {
   const pollSchedules = schedules.filter((s) => s.kind === 'poll');
 
@@ -295,7 +329,7 @@ describe('notification sessions (silent riders)', () => {
   // The documented design: each session rings once. The anchors ring; the
   // posts co-scheduled a minute later ride along silently. See schedules.ts.
   const AUDIBLE = ['morning_azkar', 'evening_azkar', 'night_review_poll'];
-  const SILENT = ['friday_sunnah', 'fasting_reminder', 'pre_sleep'];
+  const SILENT = ['akhlaq_reminder', 'friday_sunnah', 'fasting_reminder', 'pre_sleep'];
 
   it('rides the Friday/fasting/pre-sleep posts in silently', () => {
     for (const name of SILENT) {

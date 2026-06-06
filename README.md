@@ -1,9 +1,10 @@
 # Zaaduna
 
 A small Telegram bot that posts a daily
-shared wird to one channel (morning and evening azkar, Friday sunan,
-pre-sleep dhikr, fasting reminders) and ends each night with an honest,
-anonymous self-check.
+shared wird to one channel (morning and evening azkar, Friday sunan, a
+daily reflection on أخلاق المسلم and the Prophet's ﷺ character, pre-sleep
+dhikr, fasting reminders) and ends each night with an honest, anonymous
+self-check.
 
 The night poll is the heart of it. After Isha, the bot lists the day's
 deeds and asks you to tick the ones you actually did. The vote is
@@ -35,7 +36,7 @@ src/
   scheduler.ts    Registers schedules with cron, runs them
   bot.ts          Grammy setup: /start + admin commands
   health.ts       Tiny /health HTTP endpoint for uptime checks
-  content/        The Arabic texts + the poll + the welcome message
+  content/        The Arabic texts + the poll + welcome + akhlaq library
   lib/            logger, pick (random/fixed), post (send msg + poll)
 scripts/
   send-test.ts    Dev tool: post every schedule once to preview it
@@ -49,6 +50,7 @@ docs/DEPLOY.md    How to deploy
 | ------------------- | --------------- | --------------------------------------------------------- |
 | `morning_azkar`     | every day 05:30 | أذكار الصباح                                              |
 | `friday_sunnah`     | Friday 05:32    | سنن الجمعة: طهارة وزينة، تبكير، الكهف، الصلاة على النبي ﷺ |
+| `akhlaq_reminder`   | every day 16:58 | وقفة في أخلاق المسلم وهَدْي النبي ﷺ (تتناوب يوميًّا)      |
 | `evening_azkar`     | every day 17:00 | أذكار المساء                                              |
 | `fasting_reminder`  | Sun & Wed 21:40 | تذكير صيام الإثنين/الخميس (الليلة التي قبلها)             |
 | `pre_sleep`         | every day 21:43 | سورة المُلك + أذكار النوم + نيّة قيام الليل               |
@@ -71,7 +73,8 @@ day**:
 
 1. A morning one — the azkar rings; on Friday the Surah Al-Kahf reminder
    rides in silently right after.
-2. A late-afternoon one — the evening azkar rings.
+2. A late-afternoon one — the akhlaq reflection arrives silently first,
+   then the evening azkar rings just below it.
 3. A bedtime one — the fasting reminder (Sunday and Wednesday) and the
    pre-sleep reminder arrive silently, then the poll rings.
 
@@ -150,6 +153,12 @@ pnpm send-test
 Everything lives in source. No database; restart (or redeploy) to apply.
 
 - **Message wording:** edit the matching file in `src/content/`.
+- **The daily akhlaq library:** edit the `akhlaqReminders` pool in
+  `src/content/akhlaq.ts`. It rotates one vignette a day (deterministic,
+  no repeats until the pool is exhausted) and nothing is ever deleted, so
+  the channel keeps a growing, browsable archive. Every saying attributed
+  to the Prophet ﷺ must be sahih or hasan with its takhreej in the comment
+  above it — see the authenticity note in the file header.
 - **The poll:** edit `src/content/poll.ts` (the question and its
   options). Keep it anonymous and multiple-answer, that is the whole
   point. The list is built at fire time so Monday and Thursday nights

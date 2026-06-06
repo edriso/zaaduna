@@ -63,10 +63,24 @@ interface BaseSchedule {
 }
 
 /** Posts a text message. `content` may be a fixed string or, if an
- *  array, one entry is picked at random per fire (see lib/pick.ts). */
+ *  array, one entry is chosen per fire — at random, or by deterministic
+ *  daily rotation (see `selection` and the kit's pick.ts). */
 export interface MessageSchedule extends BaseSchedule {
   kind: 'message';
   content: string | readonly string[];
+  /**
+   * How an array `content` is chosen each fire (ignored for a fixed
+   * string):
+   *   - 'random' (default): one entry at random (kit's pickContent).
+   *   - 'daily': deterministic day-of-year rotation (kit's pickForDay), so
+   *     the same calendar day always shows the same entry, two consecutive
+   *     days never repeat, and the whole pool is shown before any repeat.
+   *     Stateless, so it is restart-safe by construction. Used by
+   *     akhlaq_reminder to walk an evergreen library one item a day —
+   *     pair it with `keepLast: 0` so every item stays live. The
+   *     rotation is computed in config.timezone, never the host clock.
+   */
+  selection?: 'random' | 'daily';
   /**
    * Opt into a Telegram parse_mode for THIS message. Omitted (the default)
    * means plain text, the Arabic-safe norm the whole bot uses. The three

@@ -24,7 +24,7 @@ zaaduna/
 │   ├── scheduler.ts    runSchedule() dispatch + ring-buffer (cron registry from the kit)
 │   ├── schedules.ts    THE EDIT POINT: the schedule list + findSchedule
 │   ├── types.ts        ScheduleDef union + PollSpec (no import cycle)
-│   ├── content/        Arabic content modules + poll spec + welcome.ts + format.ts (azkar HTML)
+│   ├── content/        Arabic content modules + poll spec + welcome.ts + format.ts (azkar HTML) + akhlaq.ts (daily-rotation library)
 │   └── lib/            hijri (Umm al-Qura no-fast days)
 ├── scripts/
 │   ├── send-test.ts       Manual dev sender (not imported by the app)
@@ -86,16 +86,35 @@ refer to those kit modules. To change shared code, edit the kit and ship a new t
   other admins) is never tracked here, and therefore never deleted.
   See `scheduler.ts#runSchedule` + `lib/state.ts`.
 
+- **Daily-rotation evergreen library (`selection: 'daily'` + `keepLast:
+0`).** Most posts are fixed or repeating, but `akhlaq_reminder` is
+  different: it walks a growing pool of unique vignettes (أخلاق المسلم،
+  هَدْي النبي ﷺ، الصحابة، حِكَم جامعة) one item a day. Two flags make
+  this work together:
+  - `selection: 'daily'` (`types.ts` → `MessageSchedule`) picks by
+    day-of-year via the kit's `pickForDay`, computed in `config.timezone`
+    (never `Date.getDay()`): the same calendar day always shows the same
+    item, two consecutive days never repeat, and the whole pool is shown
+    before any repeat. It is **stateless**, so it is restart-safe by
+    construction — no pointer file needed, unlike the ring buffer.
+  - `keepLast: 0` opts the schedule OUT of the ring buffer, so nothing is
+    ever deleted. The channel grows a browsable, shareable archive instead
+    of throwing yesterday's reflection away (the opposite of the azkar,
+    which keep one live copy). `scheduler.ts#sendForKind` branches on
+    `selection`; `content/akhlaq.ts` holds the pool; a content test pins
+    the no-consecutive-repeat property over a full year.
+
 - **One ping per session (`silent` riders).** What makes people mute a
   channel is the number of separate notification moments, not the message
   count. So each session has one anchor that rings and the rest ride in
   with `silent: true` (Telegram `disable_notification`): they still appear
   in the channel, they just do not buzz. Anchors (ring): `morning_azkar`,
   `evening_azkar`, `night_review_poll`. Riders (silent): `friday_sunnah`
-  (after the morning azkar), `fasting_reminder` and `pre_sleep` (before the
-  night poll). Net: exactly 3 pings a day. The flag lives on the schedule
-  entry (`types.ts` → `BaseSchedule.silent`), the scheduler passes it to
-  `lib/post.ts`, and a test pins the anchor/rider split.
+  (after the morning azkar), `akhlaq_reminder` (before the evening azkar),
+  `fasting_reminder` and `pre_sleep` (before the night poll). Net: exactly
+  3 pings a day. The flag lives on the schedule entry (`types.ts` →
+  `BaseSchedule.silent`), the scheduler passes it to `lib/post.ts`, and a
+  test pins the anchor/rider split.
 
 - **Anonymous poll, not per-user tracking.** Streaks/personal history
   would need a DB and a subscriber bot, and re-introduce showing-off
@@ -196,9 +215,39 @@ adding items, check each file's reported margin first — `morningAzkar`
 already runs near the limit, so any growth requires a trim elsewhere
 in the same file or a schedule split.
 
+The akhlaq library (`content/akhlaq.ts`) follows the same discipline,
+adapted to its different shape (a pool of short, independent vignettes
+across four streams — خُلُق، هَدْي النبي ﷺ، الصحابة، حِكَم). Every
+marfūʿ text is **sahih or hasan** with its takhreej in the comment above
+it; Companion material is presented as أثر/سيرة, never as a Prophetic
+report; and the file's header lists its reference sources (الأدب المفرد،
+رياض الصالحين، الشمائل المحمدية، and dorar.net's موسوعة الأخلاق +
+الموسوعة الحديثية for tabwīb and grading). When adding an item, verify
+the grading on dorar.net/hadith or sunnah.com first, keep the stream
+emoji at the **start** of the title (it is the rotation's visual tag),
+and stay well under the 4096 limit (a test caps each at 900). Prefer texts
+that are unambiguously sahih/hasan: avoid hadiths with a real
+authentication dispute even if one grader passes them (the «أدِّ الأمانة
+… ولا تخن من خانك» wording was dropped for exactly this — Albani graded it
+sahih but al-Shafiʿi, Abu Hatim, Ibn al-Jawzi and Ibn Hajar weakened it).
+
+**Pool size is not just about volume — it sets the repeat interval, and
+it does so non-obviously.** `pickForDay` indexes by day-of-year, so an
+item normally reappears every `length` days, but the year-boundary phase
+reset can shorten that gap, and how much depends sharply on the size:
+41 items → 37-day minimum gap, but 40 or 45 → a jarring ~5-day gap. The
+pool is currently **41** (a deliberate, well-spaced value); a min-gap test
+in `akhlaq.test.ts` fails if a resize lands on a bad value. Keep it ≥ 28,
+and if you change it, run the tests — a red min-gap means nudge by ±1.
+
 ## How to change what it posts
 
 1. Message text → edit the file in `src/content/`.
+   - The daily akhlaq vignettes → edit the `akhlaqReminders` array in
+     `src/content/akhlaq.ts`. Each entry is one vignette (stream emoji +
+     title, then body), with its takhreej in the comment above it. Order
+     is interleaved so the streams alternate day to day; keep the pool
+     ≥ 28 and every marfūʿ text sahih/hasan. See the authenticity note.
 2. The poll → edit `src/content/poll.ts` (stay anonymous + multi;
    keep any emoji at the **end** of each option/question and leave a
    little margin under 100 chars — `rtlIsolate` adds 2; see below).
@@ -270,9 +319,17 @@ legacy single-number migration, array round-trip, clear-on-empty,
 parent-dir creation), `startScheduler` skipping an invalid cron,
 `pickContent` (blank and array handling), `channelUrlFrom`,
 `resolvePort`, the `skipIf` guard (skips the post + leaves the ring
-buffer untouched), the silent-rider split (anchors ring, the Friday /
-fasting / pre-sleep riders carry `silent: true`, and `post.ts` sends
-`disable_notification` only when asked), `content/format.ts` (the azkar
+buffer untouched), the silent-rider split (anchors ring, the akhlaq /
+Friday / fasting / pre-sleep riders carry `silent: true`, and `post.ts`
+sends `disable_notification` only when asked), the akhlaq daily-rotation
+library (`content/akhlaq.ts`: pool ≥ 28, non-blank + length-capped,
+no duplicates, every vignette opens with a stream emoji, `pickForDay`
+never repeats on consecutive days across 4 years incl. the 2028 leap day,
+and no item reappears within ~3 weeks — the min-gap test that pins the
+repeat interval against a bad pool size; plus `schedules.ts`
+pins `selection: 'daily'` + `keepLast: 0` and the fire-before-evening
+order, and `runSchedule` posts the daily pick idempotently within a day
+and never tracks/deletes it), `content/format.ts` (the azkar
 HTML: bold title only, `escapeHtml`, and `renderedText` round-tripping the
 HTML back to the byte-exact plain source so the 4096 check measures what
 Telegram renders), the inline-button specs (every button has non-empty

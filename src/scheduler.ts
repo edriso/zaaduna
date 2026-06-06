@@ -2,6 +2,7 @@ import { InlineKeyboard, type Bot, type Context } from 'grammy';
 import {
   Scheduler,
   pickContent,
+  pickForDay,
   post,
   sendPoll,
   deleteMessage,
@@ -84,7 +85,14 @@ async function sendForKind(bot: Bot<Context>, def: ScheduleDef): Promise<number 
     const spec = typeof def.poll === 'function' ? def.poll() : def.poll;
     return sendPoll(bot, config.channelChatId, spec, { name: def.name, silent: def.silent });
   }
-  const text = pickContent(def.content);
+  // 'daily' walks an evergreen pool one item a day (same date → same
+  // item, no consecutive repeats), computed in config.timezone so "today"
+  // means today in the bot's TZ, not the host clock. Everything else picks
+  // at random. A fixed string is returned as-is by both pickers.
+  const text =
+    def.selection === 'daily'
+      ? pickForDay(def.content, new Date(), config.timezone)
+      : pickContent(def.content);
   if (!text) {
     logger.warn('Schedule has no content to post, skipping', { name: def.name });
     return null;
