@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import cron from 'node-cron';
 import { schedules, findSchedule } from './schedules';
 import { MIN_CLOSE_HOURS, MAX_CLOSE_HOURS, rtlIsolate } from 'telegram-broadcast-kit';
-import { buildNightReviewPoll } from './content/poll';
+import { buildNightReviewPoll, isPollNight } from './content/poll';
 import { renderedText } from './content/format';
 import { hijriDate } from './lib/hijri';
 import type { PollSpec } from './types';
@@ -254,6 +254,50 @@ describe('poll schedules', () => {
       expect(normalMon.options.some((o) => o.includes('صيام الاثنين'))).toBe(true);
       expect(normalMon.options.length).toBe(10);
     });
+  });
+});
+
+describe('night_review_poll — "a night yes, a night no" alternation', () => {
+  const TZ = 'Africa/Cairo';
+  // 21:45 local on three consecutive days (the poll's fire time).
+  const d1 = new Date('2026-06-10T18:45:00Z'); // Cairo 21:45
+  const d2 = new Date('2026-06-11T18:45:00Z');
+  const d3 = new Date('2026-06-12T18:45:00Z');
+
+  it('the poll carries a skipIf guard (it does not fire nightly)', () => {
+    const poll = findSchedule('night_review_poll');
+    expect(poll?.skipIf).toBeTypeOf('function');
+  });
+
+  it('isPollNight flips every calendar day (send one night, skip the next)', () => {
+    expect(isPollNight(d1, TZ)).not.toBe(isPollNight(d2, TZ));
+    expect(isPollNight(d2, TZ)).not.toBe(isPollNight(d3, TZ));
+    // ...so consecutive days never match, across a longer span too.
+    for (let i = 0; i < 12; i++) {
+      const a = new Date(d1.getTime() + i * 86400000);
+      const b = new Date(d1.getTime() + (i + 1) * 86400000);
+      expect(isPollNight(a, TZ)).not.toBe(isPollNight(b, TZ));
+    }
+  });
+
+  it('is deterministic for a given calendar date (restart-safe, no saved state)', () => {
+    // Two different instants on the SAME Cairo day → same verdict.
+    const morning = new Date('2026-06-10T05:00:00Z'); // Cairo 08:00, 10 Jun
+    const evening = new Date('2026-06-10T20:00:00Z'); // Cairo 23:00, 10 Jun
+    expect(isPollNight(morning, TZ)).toBe(isPollNight(evening, TZ));
+  });
+
+  it('keys off the local calendar date, not the host clock (tz-aware)', () => {
+    // 23:30 UTC on 10 Jun is already 11 Jun in Cairo (UTC+3 → 02:30), so the
+    // two zones can land on different parity for the same instant.
+    const instant = new Date('2026-06-10T23:30:00Z');
+    expect(isPollNight(instant, 'UTC')).not.toBe(isPollNight(instant, TZ));
+  });
+
+  it('the schedule skipIf agrees with isPollNight (skip = not a poll night)', () => {
+    const poll = findSchedule('night_review_poll');
+    expect(poll?.skipIf!(d1)).toBe(!isPollNight(d1, TZ));
+    expect(poll?.skipIf!(d2)).toBe(!isPollNight(d2, TZ));
   });
 });
 

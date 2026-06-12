@@ -4,7 +4,7 @@ import { preSleepReminder } from './content/preSleep';
 import { fridaySunnah } from './content/fridaySunnah';
 import { akhlaqReminders } from './content/akhlaq';
 import { fastingReminder } from './content/fasting';
-import { buildNightReviewPoll } from './content/poll';
+import { buildNightReviewPoll, isPollNight } from './content/poll';
 import { azkarHtml } from './content/format';
 import { fastForbiddenTomorrow } from './lib/hijri';
 import { config } from './config';
@@ -28,9 +28,12 @@ export type { ScheduleDef } from './types';
  * are co-scheduled a minute apart into one "session", and the rider posts
  * carry `silent: true` (Telegram disable_notification) so each session
  * rings exactly once: a morning ping (morning azkar), an evening ping
- * (evening azkar), and a bedtime ping (the night poll). That is ≤3
- * interruptions a day; the akhlaq/Friday/fasting riders still arrive, just
- * without a buzz.
+ * (evening azkar), and a bedtime ping (the night poll). The night poll
+ * fires every OTHER night ("a night yes, a night no" — see isPollNight),
+ * so the bedtime ping lands every second night; the off-night bedtime
+ * window is silent (pre_sleep carries no buzz). Net: 3 pings on a poll
+ * night, 2 on an off night. The akhlaq/Friday/fasting riders still arrive,
+ * just without a buzz.
  *
  * In the evening window the akhlaq reminder fires FIRST (16:58, silent),
  * then the evening azkar rings (17:00) and sits newest at the bottom. So
@@ -39,8 +42,9 @@ export type { ScheduleDef } from './types';
  *
  * In the bedtime window the poll fires LAST (fasting → pre-sleep → poll),
  * so it sits newest at the bottom; its last option «سورة المُلك وأذكار
- * النوم» points the reader up to the pre-sleep message to act on. The poll
- * is the one audible bedtime post, so the single ping lands on it.
+ * النوم» points the reader up to the pre-sleep message to act on. On a poll
+ * night the poll is the one audible bedtime post, so the single ping lands on
+ * it; on an off night nothing rings at bedtime (pre_sleep stays silent).
  */
 export const schedules: ScheduleDef[] = [
   {
@@ -49,7 +53,8 @@ export const schedules: ScheduleDef[] = [
     // 05:30 Cairo: inside the Fajr→sunrise window all year (sunrise
     // swings ~5:55 June to ~6:45 December). 06:00 drifts past it in summer.
     cron: '30 5 * * *',
-    // HTML only for a bold title; body stays normal-size text. azkarHtml
+    // HTML for a bold title + a partial expandable blockquote: title + intro
+    // stay full-size, the long du'a list collapses ("Show more"). azkarHtml
     // escapes the text; see content/format.ts.
     content: azkarHtml(morningAzkar),
     parseMode: 'HTML',
@@ -102,7 +107,7 @@ export const schedules: ScheduleDef[] = [
     // valid year-round; don't move it to 16:30 — that falls before Asr in
     // summer (Cairo Asr reaches ~17:00 at the solstice).
     cron: '0 17 * * *',
-    // HTML bold title, same as morning_azkar.
+    // HTML bold title + partial expandable blockquote, same as morning_azkar.
     content: azkarHtml(eveningAzkar),
     parseMode: 'HTML',
     description: 'أذكار المساء، كل يوم 5:00 م. الأفضل قراءتها بين العصر والمغرب.',
@@ -125,7 +130,7 @@ export const schedules: ScheduleDef[] = [
     name: 'pre_sleep',
     kind: 'message',
     cron: '43 21 * * *',
-    // HTML bold title, same as morning_azkar.
+    // HTML bold title + partial expandable blockquote, same as morning_azkar.
     content: azkarHtml(preSleepReminder),
     parseMode: 'HTML',
     // One-tap links to the suras this message names. Quran is referenced,
@@ -149,12 +154,18 @@ export const schedules: ScheduleDef[] = [
     // Factory, rebuilt each fire so Mon/Thu nights add a fasting option
     // (see poll.ts), while one schedule + one state key keeps cleanup simple.
     poll: () => buildNightReviewPoll(),
+    // "A night yes, a night no": fire every OTHER night, not nightly. On an
+    // off night the guard skips the post and leaves the ring buffer untouched,
+    // so the previous poll stays until the next poll night replaces it. The
+    // off-night bedtime window then has no audible anchor (pre_sleep is
+    // silent) — a deliberately calmer night. See isPollNight in poll.ts.
+    skipIf: (now) => !isPollNight(now, config.timezone),
     // Opts the poll into replace-on-next-fire (polls default to 0 =
     // untracked), so exactly one live poll shows — no stack of identical
     // questions burying the pinned welcome.
     keepLast: 1,
     description:
-      'استبيان مراجعة الليلة (مجهول)، كل يوم 9:45 م — آخر منشور في النافذة، يدلّ المُتَخَلِّف عن ذكرٍ إلى رسالة ما قبل النوم فوقَه. تُحذَف نسخة الليلة السابقة عند نشر الجديدة.',
+      'استبيان مراجعة الليلة (مجهول)، ليلةً بعد ليلة (يُرسَل ليلة ويُترَك ليلة) 9:45 م — آخر منشور في النافذة، يدلّ المُتَخَلِّف عن ذكرٍ إلى رسالة ما قبل النوم فوقَه. تُحذَف نسخة المراجعة السابقة عند نشر الجديدة.',
   },
 ];
 

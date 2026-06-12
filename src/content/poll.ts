@@ -73,6 +73,38 @@ const OPTIONS_BY_DAY: Record<number, readonly DayOption[]> = {
   4: [{ option: 'صيام الخميس 🌒', after: FASTING_ANCHOR, fasting: true }], // Thursday
 };
 
+/**
+ * "A night yes, a night no": the review poll fires every OTHER night, not
+ * nightly — a gentler cadence (one bedtime poll moment every two days). True
+ * on a poll night (send), false on an off night. Wired as night_review_poll's
+ * skipIf in schedules.ts (skip = !isPollNight); on an off night runSchedule
+ * leaves the ring buffer untouched, so the previous poll just stays until the
+ * next poll night replaces it.
+ *
+ * Determinism: keyed off the civil date IN `tz` (never Date.getDay()/the host
+ * clock — same discipline as weekdayInTz / pickForDay), turned into a stable
+ * day number whose parity flips each calendar day. So a given date is always
+ * the same (poll or off), two consecutive nights never match, and it needs no
+ * saved state (restart-safe by construction). Even day number = poll night;
+ * flip the `=== 0` to shift the phase by one day if the wrong nights land.
+ */
+function dayNumberInTz(now: Date, tz: string): number {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+  const get = (t: string): number => Number(parts.find((p) => p.type === t)!.value);
+  // Days since the Unix epoch for that civil date (UTC midnight) — a stable
+  // integer that increments by exactly 1 per local calendar day.
+  return Math.floor(Date.UTC(get('year'), get('month') - 1, get('day')) / 86_400_000);
+}
+
+export function isPollNight(now: Date = new Date(), tz: string = config.timezone): boolean {
+  return dayNumberInTz(now, tz) % 2 === 0;
+}
+
 /** Weekday in `tz` (0=Sun..6=Sat) via Intl, not Date.getDay(), so
  *  "Monday" means Monday in TZ_NAME and not on the host (usually UTC). */
 function weekdayInTz(now: Date, tz: string): number {

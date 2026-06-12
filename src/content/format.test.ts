@@ -21,7 +21,7 @@ describe('escapeHtml', () => {
 });
 
 describe('renderedText', () => {
-  it('strips the bold tags and decodes entities (round-trips azkarHtml back to plain)', () => {
+  it('strips the bold + blockquote tags and decodes entities (round-trips azkarHtml back to plain)', () => {
     const plain = 'X\n\nintro\n\n١. a\n٢. b\n\nfooter';
     expect(renderedText(azkarHtml(plain))).toBe(plain);
   });
@@ -51,8 +51,13 @@ describe('azkarHtml structure', () => {
         expect(html.indexOf('</b>')).toBeLessThan(html.indexOf('\n'));
       });
 
-      it('uses no blockquote (body stays normal-size text)', () => {
-        expect(html).not.toContain('blockquote');
+      it('collapses the long dua list into one expandable blockquote (title + intro stay outside)', () => {
+        expect((html.match(/<blockquote expandable>/g) ?? []).length).toBe(1);
+        expect((html.match(/<\/blockquote>/g) ?? []).length).toBe(1);
+        // The blockquote opens AFTER the bold title (the hook stays outside it).
+        expect(html.indexOf('<blockquote expandable>')).toBeGreaterThan(html.indexOf('</b>'));
+        // ...and it is the last thing in the message (the list runs to the end).
+        expect(html.trimEnd().endsWith('</blockquote>')).toBe(true);
       });
 
       it('contains no raw < > & outside the tags we add (would 400 a parse)', () => {

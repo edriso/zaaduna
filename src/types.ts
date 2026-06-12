@@ -84,8 +84,9 @@ export interface MessageSchedule extends BaseSchedule {
   /**
    * Opt into a Telegram parse_mode for THIS message. Omitted (the default)
    * means plain text, the Arabic-safe norm the whole bot uses. The three
-   * long azkar set 'HTML' for a bold title only (body stays normal-size);
-   * their content is built by azkarHtml(), which escapes & < >.
+   * long azkar set 'HTML' for a bold title + a partial expandable blockquote
+   * (title + intro full-size, the long list collapsed); their content is
+   * built by azkarHtml(), which escapes & < >.
    * See content/format.ts and the "no parse_mode" note in CLAUDE.md.
    */
   parseMode?: 'HTML' | 'MarkdownV2' | 'Markdown';

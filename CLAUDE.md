@@ -3,10 +3,11 @@
 ## What this is
 
 A near-zero-state Telegram bot that posts daily Islamic reminders to one
-channel and runs a nightly **anonymous** self-review poll. The poll is
-anonymous + multiple-answer on purpose: Telegram aggregates the votes
-and shows percentages to everyone, nobody (including this bot) learns
-who voted. That delivers community motivation with no riya and no DB.
+channel and runs an **anonymous** self-review poll every other night ("a
+night yes, a night no"). The poll is anonymous + multiple-answer on
+purpose: Telegram aggregates the votes and shows percentages to everyone,
+nobody (including this bot) learns who voted. That delivers community
+motivation with no riya and no DB.
 
 Repeating reminders (azkar) auto-replace each other — the channel keeps
 one live copy per schedule, not a year of identical dupes. Polls and
@@ -109,8 +110,11 @@ refer to those kit modules. To change shared code, edit the kit and ship a new t
   in the channel, they just do not buzz. Anchors (ring): `morning_azkar`,
   `evening_azkar`, `night_review_poll`. Riders (silent): `friday_sunnah`
   (after the morning azkar), `akhlaq_reminder` (before the evening azkar),
-  `fasting_reminder` and `pre_sleep` (before the night poll). Net: exactly
-  3 pings a day. The flag lives on the schedule entry (`types.ts` →
+  `fasting_reminder` and `pre_sleep` (before the night poll). Net: **3 pings
+  on a poll night, 2 on an off night** — the night poll fires every other
+  night (see the poll-cadence note below), and on its off nights the bedtime
+  window has no audible anchor (`pre_sleep` stays silent), so nothing rings
+  at bedtime. The flag lives on the schedule entry (`types.ts` →
   `BaseSchedule.silent`), the scheduler passes it to `lib/post.ts`, and a
   test pins the anchor/rider split.
 
@@ -118,6 +122,22 @@ refer to those kit modules. To change shared code, edit the kit and ship a new t
   would need a DB and a subscriber bot, and re-introduce showing-off
   (riya). The anonymous poll keeps motivation without either. Do not
   "upgrade" this without a deliberate decision.
+- **The poll fires every other night ("a night yes, a night no").**
+  `night_review_poll` carries a `skipIf` that suppresses it on alternate
+  nights (`skipIf: (now) => !isPollNight(now, config.timezone)`), so the
+  nightly self-review becomes an every-other-night one — a gentler bedtime
+  cadence. `isPollNight` (`content/poll.ts`) keys off the **civil date in
+  `config.timezone`** (turned into a stable day number whose parity flips
+  each calendar day), never `Date.getDay()`/the host clock — same discipline
+  as `weekdayInTz`/`pickForDay` — so a given date is always the same verdict,
+  two consecutive nights never match, and it needs **no saved state** (the
+  `skipIf` path leaves the ring buffer untouched, so the previous poll just
+  stays until the next poll night replaces it). Flip the `=== 0` in
+  `isPollNight` to shift the phase by one day. Trade-off accepted on purpose:
+  the daily محاسبة becomes every-other-day, and Mon/Thu fasting self-review
+  is only offered on the poll nights that land on Mon/Thu (the fasting
+  _reminder_ still fires on its own schedule). A test pins the alternation,
+  determinism, and tz-awareness.
 - **`ScheduleDef` is a discriminated union** (`kind: 'message' |
 'poll'`). `scheduler.ts#runSchedule` switches on `kind`. Adding a
   schedule needs no other code change.
@@ -151,18 +171,27 @@ refer to those kit modules. To change shared code, edit the kit and ship a new t
   400 on. Plain text renders Arabic + emoji perfectly, so it is the
   default for every post. The single exception is the three long azkar
   (morning / evening / pre-sleep): they use `parse_mode: 'HTML'` for a
-  **bold title** only — the body stays normal-size plain text. This is safe
-  because (a) in HTML mode only `& < >` are special and the azkar text has
-  none, and (b) `azkarHtml` (`content/format.ts`) runs every part through
-  `escapeHtml`, so a future edit that adds one of those characters still
-  can't 400. HTML tags do NOT count toward the 4096-char limit — the limit
-  is on the rendered text — so the schedule test measures `renderedText(...)`,
-  not the raw markup. Everything else stays plain.
-  - We tried an **expandable blockquote** to collapse the long list in the
-    feed, but Telegram renders blockquote text in a smaller, condensed font
-    and the Bot API has no font-size control. Readable normal-size du'a beat
-    the tidy-but-tiny block, so we dropped it. The Arabic-Indic numbering
-    (`١. ٢. ٣.`) carries the readability instead.
+  **bold title** plus a **partial expandable blockquote** (see below). This
+  is safe because (a) in HTML mode only `& < >` are special and the azkar
+  text has none, and (b) `azkarHtml` (`content/format.ts`) runs every part
+  through `escapeHtml`, so a future edit that adds one of those characters
+  still can't 400. HTML tags do NOT count toward the 4096-char limit — the
+  limit is on the rendered text — so the schedule test measures
+  `renderedText(...)`, not the raw markup. Everything else stays plain.
+  - **Partial expandable blockquote.** Each azkar is ~3–4k chars; flat, one
+    of them is a screen-and-a-half wall that buries the rest of the feed. So
+    `azkarHtml` keeps the **bold title + the intro paragraph at full size**
+    (the readable hook) and wraps **the long du'a list in
+    `<blockquote expandable>`** — collapsed in the feed to a few preview
+    lines + "Show more". Why "partial" and not the whole body: Telegram
+    renders blockquote text in a smaller, condensed font with no size
+    control, so only the deliberately-expanded list takes the smaller font;
+    the hook stays normal-size. We previously shipped a flat full-size list
+    (and rejected a FULL expandable for the small font); this is the middle
+    ground. The split is content-agnostic — title = first line, intro =
+    first paragraph, body = from the second blank line on — and every azkar
+    file follows that shape (title / blank / intro / blank / list). The
+    Arabic-Indic numbering (`١. ٢. ٣.`) still carries the in-list readability.
 - **Inline URL buttons link the referenced suras.** The bot references
   Quran, never reproduces it, so a one-tap link is the natural action:
   `pre_sleep` carries «سورة المُلك / السجدة / الكافرون» (quran.com),
@@ -254,7 +283,10 @@ min-gap test goes red, change the count by 1 and try again.
    The base list is 9 items; Mon/Thu nights add one fasting option,
    so the total stays ≤ 10 (Telegram's hard max). If you grow the
    base list above 9, the Mon/Thu variant overflows — tests will
-   catch it.
+   catch it. The poll fires every OTHER night (`isPollNight` +
+   `night_review_poll.skipIf` — see the poll-cadence design note); to make
+   it nightly again, drop that `skipIf` in `schedules.ts`, and to shift
+   which nights it lands on, flip the `=== 0` in `isPollNight`.
 3. Times / new schedules → edit `src/schedules.ts`.
    The framework code does not need to change.
 4. Sura/reference links under a message → edit that schedule's `buttons`
@@ -319,7 +351,11 @@ legacy single-number migration, array round-trip, clear-on-empty,
 parent-dir creation), `startScheduler` skipping an invalid cron,
 `pickContent` (blank and array handling), `channelUrlFrom`,
 `resolvePort`, the `skipIf` guard (skips the post + leaves the ring
-buffer untouched), the silent-rider split (anchors ring, the akhlaq /
+buffer untouched), the poll's every-other-night alternation
+(`isPollNight` + `night_review_poll.skipIf`: flips each calendar day so
+consecutive nights never match, is deterministic per date, keys off the tz
+civil date not the host clock, and the schedule's `skipIf` equals
+`!isPollNight`), the silent-rider split (anchors ring, the akhlaq /
 Friday / fasting / pre-sleep riders carry `silent: true`, and `post.ts`
 sends `disable_notification` only when asked), the akhlaq daily-rotation
 library (`content/akhlaq.ts`: pool ≥ 28, non-blank + length-capped,
@@ -330,9 +366,10 @@ repeat interval against a bad pool size; plus `schedules.ts`
 pins `selection: 'daily'` + `keepLast: 0` and the fire-before-evening
 order, and `runSchedule` posts the daily pick idempotently within a day
 and never tracks/deletes it), `content/format.ts` (the azkar
-HTML: bold title only, `escapeHtml`, and `renderedText` round-tripping the
-HTML back to the byte-exact plain source so the 4096 check measures what
-Telegram renders), the inline-button specs (every button has non-empty
+HTML: a bold title plus a single partial expandable blockquote — title +
+intro stay outside it, the long du'a list is collapsed inside it — `escapeHtml`,
+and `renderedText` round-tripping the HTML back to the byte-exact plain source
+so the 4096 check measures what Telegram renders), the inline-button specs (every button has non-empty
 text and an `https://` URL; `runSchedule` attaches them via
 `editMessageReplyMarkup` only when present and a failed attach is
 non-fatal), and `lib/hijri.ts` (Umm al-Qura mapping; Eid/Tashreeq

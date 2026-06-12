@@ -2,21 +2,37 @@
  * HTML formatting for the long azkar messages.
  *
  * The three azkar posts (morning / evening / pre-sleep) are long lists of
- * du'a. They are sent with parse_mode 'HTML' for ONE small touch: a BOLD
- * title line. The body stays normal-size plain text.
+ * du'a (each ~3-4k chars). Sent flat, one of them is a screen-and-a-half
+ * wall that dominates the channel feed. So azkarHtml gives them a
+ * "partial expandable blockquote" shape:
  *
- * Why not an expandable blockquote (which would collapse the long list in
- * the feed): Telegram renders blockquote text in a smaller, condensed font,
- * and the Bot API has no font-size control. Normal-size, readable du'a beats
- * a tidy-but-tiny collapsed block, so we keep the list at full size. The
- * Arabic-Indic numbering (١. ٢. ٣.) carries the readability instead.
+ *   <b>title</b>            ← full size, the readable hook
+ *   intro paragraph         ← full size, still the hook
+ *   <blockquote expandable> ← the long du'a list, COLLAPSED in the feed
+ *     ١. ...                   ("Show more" expands it)
+ *     ٢. ...
+ *   </blockquote>
  *
- * Two facts make the bold title safe and cheap:
+ * Net: the feed shows a title + one intro line + a few preview lines + a
+ * "Show more" tap, instead of a full wall. The reader who wants to recite
+ * taps to expand. Why "partial" (title + intro OUTSIDE the quote): Telegram
+ * renders blockquote text in a smaller, condensed font with no size control,
+ * so we keep the hook at normal size and only the deliberately-expanded list
+ * is in the smaller font. We tried a FULL expandable (everything quoted) and
+ * a flat full-size list before; this is the middle ground.
+ *
+ * The split is content-agnostic: title = the first line, intro = the first
+ * paragraph after it, body = everything from the second blank line on. All
+ * three azkar files follow that shape (title / blank / intro / blank / list).
+ *
+ * Three facts make this safe and cheap:
  *   - HTML tags do NOT count toward Telegram's 4096-char message limit (the
- *     limit is on the rendered text), so the <b> tags are free.
+ *     limit is on the rendered text), so the <b>/<blockquote> tags are free.
  *   - In HTML mode only & < > are special. The Arabic du'a/Quran text has
  *     none of them, and we still run every part through escapeHtml so a
  *     future edit that adds one can never 400 the send.
+ *   - renderedText() strips our tags back to the byte-exact plain source, so
+ *     the 4096 check measures exactly what Telegram renders.
  *
  * This is the ONE deliberate carve-out from the project's "no parse_mode"
  * rule (see CLAUDE.md), scoped to these three schedules. Everything else
@@ -29,17 +45,43 @@ export function escapeHtml(s: string): string {
 }
 
 /**
- * Turn a plain azkar message into HTML: bold the title (the first line),
- * leave the rest as normal-size text. The plain text is the source of truth
- * (kept byte-exact in src/content/*); this only adds the <b> wrapper and
- * escapes & < >.
+ * Turn a plain azkar message into the partial-expandable HTML described in
+ * the file header: bold title + full-size intro, then the long du'a list in
+ * an expandable blockquote. The plain text stays the source of truth (kept
+ * byte-exact in src/content/*); this only injects <b>/<blockquote> tags and
+ * escapes & < >, so renderedText() round-trips it back exactly.
+ *
+ * Split points (both are blank-line breaks, the shape every azkar file uses):
+ *   - title  = everything before the FIRST blank line.
+ *   - intro  = the paragraph between the first and second blank lines.
+ *   - body   = everything from the second blank line on → the blockquote.
+ * If a file has no second blank line, the whole rest becomes the intro and no
+ * blockquote is added (a safe degrade — it just renders flat with a bold
+ * title, the old behaviour).
  */
 export function azkarHtml(plain: string): string {
   const trimmed = plain.trim();
-  const nl = trimmed.indexOf('\n');
-  const title = nl === -1 ? trimmed : trimmed.slice(0, nl);
-  const rest = nl === -1 ? '' : trimmed.slice(nl); // keeps the leading newlines
-  return `<b>${escapeHtml(title)}</b>${escapeHtml(rest)}`;
+
+  const firstBreak = trimmed.indexOf('\n\n');
+  if (firstBreak === -1) {
+    // No paragraphs at all — bold the single line, nothing to collapse.
+    return `<b>${escapeHtml(trimmed)}</b>`;
+  }
+  const title = trimmed.slice(0, firstBreak);
+  const afterTitle = trimmed.slice(firstBreak + 2);
+
+  const secondBreak = afterTitle.indexOf('\n\n');
+  if (secondBreak === -1) {
+    // Title + one paragraph, no long list — keep it flat (bold title only).
+    return `<b>${escapeHtml(title)}</b>\n\n${escapeHtml(afterTitle)}`;
+  }
+  const intro = afterTitle.slice(0, secondBreak);
+  const body = afterTitle.slice(secondBreak + 2);
+
+  return (
+    `<b>${escapeHtml(title)}</b>\n\n${escapeHtml(intro)}\n\n` +
+    `<blockquote expandable>${escapeHtml(body)}</blockquote>`
+  );
 }
 
 /**
@@ -50,6 +92,8 @@ export function azkarHtml(plain: string): string {
 export function renderedText(html: string): string {
   return html
     .replace(/<\/?b>/g, '')
+    .replace(/<blockquote expandable>/g, '')
+    .replace(/<\/blockquote>/g, '')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&amp;/g, '&');
