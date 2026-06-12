@@ -50,8 +50,12 @@ describe('runSchedule dispatch', () => {
 
   it('the poll schedule calls sendPoll, not sendMessage', async () => {
     const { bot, sendMessage, sendPoll } = fakeBot();
-    const def = findSchedule('night_review_poll')!;
-    expect(def.kind).toBe('poll');
+    const real = findSchedule('night_review_poll')!;
+    expect(real.kind).toBe('poll');
+    // Drop the every-other-night guard so this runs on any date — it tests
+    // kind → sendPoll, not the cadence (alternation is covered in
+    // schedules.test.ts). With the guard, an off-night would post nothing.
+    const def: ScheduleDef = { ...real, skipIf: undefined };
     const id = await runSchedule(bot, def);
     expect(id).toBe(22);
     expect(sendPoll).toHaveBeenCalledTimes(1);
@@ -384,8 +388,12 @@ describe('runSchedule ring buffer (keepLast > 1)', () => {
     const bot = {
       api: { sendMessage: vi.fn(), sendPoll, deleteMessage },
     } as unknown as Bot<Context>;
-    const def = findSchedule('night_review_poll')!;
-    expect(def.keepLast).toBe(1);
+    const real = findSchedule('night_review_poll')!;
+    expect(real.keepLast).toBe(1);
+    // Drop the every-other-night guard so both fires run on any date; this
+    // test pins the keepLast=1 replace-on-next-fire wiring, not the cadence
+    // (that is covered deterministically in schedules.test.ts).
+    const def: ScheduleDef = { ...real, skipIf: undefined };
 
     await runSchedule(bot, def);
     await runSchedule(bot, def);
