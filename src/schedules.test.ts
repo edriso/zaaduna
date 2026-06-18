@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import cron from 'node-cron';
 import { schedules, findSchedule } from './schedules';
 import { MIN_CLOSE_HOURS, MAX_CLOSE_HOURS, rtlIsolate } from 'telegram-broadcast-kit';
-import { buildNightReviewPoll, isPollNight, BIRR_DEEDS } from './content/poll';
+import { buildNightReviewPoll, isPollNight, BIRR_DEEDS, AKHLAQ_CHECKS } from './content/poll';
 import { renderedText } from './content/format';
 import { hijriDate } from './lib/hijri';
 import type { PollSpec } from './types';
@@ -290,6 +290,47 @@ describe('poll schedules', () => {
     it('is deterministic per date+tz', () => {
       const d = new Date('2026-06-12T18:45:00Z');
       expect(buildNightReviewPoll(d, TZ).options).toEqual(buildNightReviewPoll(d, TZ).options);
+    });
+  });
+
+  // The rotating أخلاق/قلب self-check: one per poll night, so character topics
+  // vary across days while the worship core stays fixed. Same rotation
+  // discipline as the بِرّ slot.
+  describe('night review poll — rotating أخلاق check', () => {
+    const TZ = 'Africa/Cairo';
+    it('always includes exactly one أخلاق check', () => {
+      for (let i = 0; i < 16; i++) {
+        const d = new Date(Date.UTC(2026, 5, 10, 18, 45) + i * 86_400_000);
+        const p = buildNightReviewPoll(d, TZ);
+        const present = AKHLAQ_CHECKS.filter((c) => p.options.includes(c));
+        expect(present.length, `night ${i} should have one أخلاق check`).toBe(1);
+      }
+    });
+
+    it('rotates one step per poll night and walks the whole list', () => {
+      const seen: string[] = [];
+      for (let i = 0; i < AKHLAQ_CHECKS.length; i++) {
+        const d = new Date(Date.UTC(2026, 5, 10, 18, 45) + i * 2 * 86_400_000);
+        const p = buildNightReviewPoll(d, TZ);
+        seen.push(AKHLAQ_CHECKS.find((c) => p.options.includes(c))!);
+      }
+      for (let i = 1; i < seen.length; i++) expect(seen[i]).not.toBe(seen[i - 1]);
+      expect(new Set(seen).size).toBe(AKHLAQ_CHECKS.length);
+    });
+
+    it('keeps the fixed worship core on every night', () => {
+      // The core essentials must never rotate out — check across many nights.
+      const CORE = [
+        'أذكار الاستيقاظ ثم صلاة الفجر في وقتها ⏰',
+        'ورد القرآن (ولو صفحة) 🔖',
+        'استغفار ١٠٠ مرّة 📿',
+        'سورة المُلك وأذكار النوم 🌙',
+      ];
+      for (let i = 0; i < 20; i++) {
+        const d = new Date(Date.UTC(2026, 5, 10, 18, 45) + i * 86_400_000);
+        const opts = buildNightReviewPoll(d, TZ).options;
+        for (const c of CORE) expect(opts, `night ${i} missing core: ${c}`).toContain(c);
+      }
     });
   });
 });

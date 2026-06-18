@@ -7,37 +7,47 @@ import { noFastReason } from '../lib/hijri';
  * (not even the bot) sees who voted — only aggregate percentages. No DB,
  * no riya.
  *
- * Built per fire by buildNightReviewPoll: the 9 BASE_OPTIONS, plus one
- * rotating بِرّ (حقوق العباد) deed every night (see BIRR_DEEDS), plus the
- * day's extras spliced in from OPTIONS_BY_DAY (keyed by weekday in TZ_NAME).
- * So the list is 10 most nights, 11 on Mon/Thu (the صيام option). Adding a
- * day-specific list later (e.g. Friday) is one entry in that table — no
- * branching in the function, and one schedule + one state key keeps
- * replace-on-next-fire intact.
+ * Built per fire by buildNightReviewPoll. Three kinds of option:
+ *   - A FIXED daily-worship core (CORE_WAKE + CORE_NIGHT) shown EVERY night —
+ *     the "initial" essentials you review daily (fajr, morning/evening
+ *     adhkar, Qur'an, duha, khushūʿ + post-prayer dhikr, istighfar, qiyam,
+ *     Mulk + sleep adhkar). These never rotate out, so the core is always
+ *     covered.
+ *   - One ROTATING أخلاق/قلب self-check (AKHLAQ_CHECKS) and one ROTATING بِرّ
+ *     (حقوق العباد) deed (BIRR_DEEDS) — one of EACH per night. They rotate
+ *     once per poll night, so a WIDER set of character + dealing-with-people
+ *     topics is reviewed across the days, without the list ever growing. The
+ *     two pools have different lengths, so their pairing varies over time too.
+ *   - Day-specific extras from OPTIONS_BY_DAY (Mon/Thu add a صيام option).
+ * So the list is 10 most nights, 11 on Mon/Thu. Adding a day-specific list
+ * later (e.g. Friday) is one entry in that table — no branching in the
+ * function, and one schedule + one state key keeps replace-on-next-fire intact.
  *
  * Telegram limits: question ≤300 chars, 2..12 options (the cap was raised
  * from 10 to 12 in Bot API 9.1, Jul 2025), each ≤100. Keep the emoji at the
  * END of each string (a leading emoji collides with the vote %/count Telegram
  * appends) and leave a little margin — rtlIsolate in lib/post.ts adds 2 chars.
  *
- * Wording principle: every option is an HONEST effort you can tick
- * without lying or feeling defeated («ولو ركعتين», «أدومها وإن قلّ») —
- * not a claim of perfection. Items that are genuinely done in one sitting
- * are merged; قيام الليل is kept separate from الضحى (distinct worship).
+ * Framing — TODAY *and* tomorrow: it is a محاسبة for today AND a نيّة for the
+ * coming day ("tick what you did today; what you missed, resolve for
+ * tomorrow"), so a reader who opens it late, or who wants to commit for
+ * tomorrow, still benefits. Every option is an HONEST effort you can tick
+ * without lying or feeling defeated («ولو ركعتين», «أدومها وإن قلّ»), not a
+ * claim of perfection.
  */
 
 const QUESTION =
-  'حاسِب نفسك قبل النوم: بمَ وفّقك الله اليوم؟ (سرّي مجهول؛ أشِّر بصدقٍ على ما أدّيت، وانوِ بمشاركتك تشجيعَ غيرك والتنافسَ في الخير) 📋';
+  'محاسبةُ اليوم ونيّةُ الغد (سرّي مجهول): أشِّر على ما وفّقك الله إليه اليوم، وما فاتك فاعزِم عليه غدًا بإذنه؛ نتنافس في الخير ويشجّع بعضنا بعضًا 📋';
 
-// The general list shown every night, in this deliberate order (see
-// header). Single source of truth: day-specific nights inject extras
-// into it via OPTIONS_BY_DAY rather than redefining the list.
-const BASE_OPTIONS: readonly string[] = [
+// The FIXED daily-worship core, split around the rotating self-checks (see
+// header). These "initial" essentials show every night, in this order.
+const CORE_WAKE: readonly string[] = [
   'أذكار الاستيقاظ ثم صلاة الفجر في وقتها ⏰',
   'أذكار الصباح والمساء 🛡️',
   'ورد القرآن (ولو صفحة) 🔖',
   'صلاة الضحى ولو ركعتين ☀️',
-  'حفظت لساني عن الغِيبة، ولم يَغلِبني الغضب (طوّلت بالي ولِنتُ لمن حولي) 🤍',
+];
+const CORE_NIGHT: readonly string[] = [
   'اجتهدت في خشوع صلاتي وطمأنينتها، وقُلت أذكار ما بعد الصلاة المفروضة 🕌',
   'استغفار ١٠٠ مرّة 📿',
   'قيام الليل ولو ركعتين ✨',
@@ -63,40 +73,47 @@ interface DayOption {
   fasting?: boolean;
 }
 
-// Insert fasting after خشوع الصلاة (last of the day's worship), before
-// the pre-sleep cluster.
+// Insert fasting after خشوع الصلاة (first of CORE_NIGHT), before the
+// istighfar/qiyam/sleep cluster — its spot in the day's worship.
 const FASTING_ANCHOR = 'اجتهدت في خشوع صلاتي وطمأنينتها، وقُلت أذكار ما بعد الصلاة المفروضة 🕌';
 
-// The بِرّ (حقوق العباد) slot — one rotating "did you do good to others
-// today?" option, so the review covers dealing with people (charity,
-// feeding, kinship, relieving a burden, visiting the sick), not only
-// personal worship. It rides in a SINGLE option so the poll stays small;
-// the deed rotates night to night to cover the whole list over time.
-// Emoji at the END (poll bidi convention; see header). Each stays < 100
-// chars after rtlIsolate's +2.
+// ROTATING أخلاق/قلب self-check — one per poll night, so different character
+// and heart topics come up on different days (the لسان/غضب check is the first
+// here, so it is still covered, just not every single night). Emoji at the
+// END; each < 100 chars after rtlIsolate's +2. Exported for tests.
+export const AKHLAQ_CHECKS: readonly string[] = [
+  'حفظتُ لساني عن الغِيبة والكلام الجارح 🤍',
+  'تمالكتُ نفسي عند الغضب، ولِنتُ لمن حولي 🌿',
+  'صدَقتُ في كلامي، ووفّيتُ بما وعدت 💬',
+  'أحسنتُ الظنّ بالناس، ولم أتتبّع عيوبهم 🕊️',
+  'تركتُ اللغوَ وما لا يعنيني، وكَفَفتُ عن الجدال 🤫',
+  'راقبتُ الله في خَلوتي، وأخلصتُ نيّتي له 💫',
+  'تواضعتُ ولم أحتقر أحدًا، وقبِلتُ الحقّ 🍃',
+];
+
+// ROTATING بِرّ (حقوق العباد) deed — one per poll night, so the review covers
+// dealing with people across the days: صدقة، إطعام، صلة رحم، تفريج كربة، برّ
+// الوالدين، عيادة مريض / إماطة أذى. Exported for tests.
 export const BIRR_DEEDS: readonly string[] = [
   'تصدّقتُ اليوم ولو بالقليل 💝',
   'أطعمتُ طعامًا أو سقيتُ، أو أعنتُ محتاجًا 🍲',
   'وصلتُ رحمًا، أو سألتُ عن قريبٍ أو صديق 📞',
   'نفّستُ كربةَ مهموم، أو قضيتُ حاجةَ أحد 🤝',
-  'عُدتُ مريضًا، أو دعوتُ لمن يشتكي 🌿',
+  'بَرَرتُ والديّ، أو أدخلتُ السرورَ عليهما 💞',
+  'عُدتُ مريضًا، أو أمَطتُ أذًى عن الطريق 🌸',
 ];
 
-// Insert the بِرّ deed right after the akhlaq option, so the two
-// "dealing with people" items (guarding the tongue + a deed for others)
-// sit together, between the day's worship and the pre-sleep cluster.
-const BIRR_ANCHOR = 'حفظت لساني عن الغِيبة، ولم يَغلِبني الغضب (طوّلت بالي ولِنتُ لمن حولي) 🤍';
-
 /**
- * The night's بِرّ deed. Rotates ONE step per poll night: the poll fires
- * every other night (isPollNight keys off dayNumberInTz parity), so
- * dividing the day number by 2 advances the deed exactly once per fire
- * and walks the whole list in order. tz-keyed and stateless, same
- * discipline as isPollNight — a given poll night always shows the same
- * deed, and consecutive poll nights differ.
+ * Pick the rotating slot for a given poll night. The poll fires every other
+ * night (isPollNight keys off dayNumberInTz parity), so dividing the day
+ * number by 2 advances by exactly one per fire and walks the whole pool in
+ * order. tz-keyed and stateless, same discipline as isPollNight — a given
+ * poll night always shows the same pick, consecutive poll nights differ, and
+ * because AKHLAQ_CHECKS and BIRR_DEEDS have different lengths their pairing
+ * varies over time too.
  */
-function birrDeedFor(now: Date, tz: string): string {
-  return BIRR_DEEDS[Math.floor(dayNumberInTz(now, tz) / 2) % BIRR_DEEDS.length];
+function rotateForNight<T>(pool: readonly T[], now: Date, tz: string): T {
+  return pool[Math.floor(dayNumberInTz(now, tz) / 2) % pool.length];
 }
 
 // Weekday in TZ_NAME (0=Sun..6=Sat) → options to add that night. THE
@@ -176,13 +193,19 @@ export function buildNightReviewPoll(
   // On a day nafl fasting is forbidden (Eid / أيام التشريق) there was no
   // fast to tick, so drop the fasting option — `now` is TODAY, the day the
   // poll reviews. Only fasting-flagged extras go; any future non-fasting
-  // day option survives. The base nine deeds always stand.
+  // day option survives. The fixed worship core always stands.
   const allExtras = OPTIONS_BY_DAY[day] ?? [];
   const extras = noFastReason(now, tz) ? allExtras.filter((e) => !e.fasting) : allExtras;
-  // The بِرّ (حقوق العباد) slot is added every night, ahead of any
-  // day-specific fasting extra; applyDayOptions splices each at its anchor.
-  const birr: DayOption = { option: birrDeedFor(now, tz), after: BIRR_ANCHOR };
-  const options = applyDayOptions(BASE_OPTIONS, [birr, ...extras]);
+  // Fixed worship core, with the night's rotating أخلاق + بِرّ checks placed
+  // between the morning and night clusters; then splice the day's fasting
+  // extra in after its anchor (خشوع الصلاة).
+  const base = [
+    ...CORE_WAKE,
+    rotateForNight(AKHLAQ_CHECKS, now, tz),
+    rotateForNight(BIRR_DEEDS, now, tz),
+    ...CORE_NIGHT,
+  ];
+  const options = applyDayOptions(base, extras);
 
   return {
     question: QUESTION,

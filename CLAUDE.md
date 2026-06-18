@@ -144,14 +144,24 @@ refer to those kit modules. To change shared code, edit the kit and ship a new t
   kit's `sendPoll` already supports quiz mode (`PollSpec.type/correctOptionId/
 explanation`); the bot's local `PollSpec` mirrors those fields.
 
-- **The night poll's rotating بِرّ slot.** `buildNightReviewPoll` adds ONE
-  rotating حقوق-العباد deed every night (`BIRR_DEEDS`: صدقة / إطعام / صلة رحم
-  / تفريج كربة / عيادة مريض) after the akhlaq option, so the محاسبة covers
-  dealing with people. It advances one step per poll night
-  (`floor(dayNumber/2)`, since the poll fires every other night) and is
-  tz-keyed/stateless like `isPollNight`. Net option count: 10 most nights, 11
-  on Mon/Thu (the صيام option). Telegram raised the per-poll cap to **12**
-  (Bot API 9.1, Jul 2025), so this fits with headroom.
+- **The night poll: fixed worship core + two rotating slots, framed
+  today-and-tomorrow.** `buildNightReviewPoll` keeps a FIXED daily-worship core
+  (`CORE_WAKE` + `CORE_NIGHT`: fajr, adhkar, Qur'an, duha, khushūʿ+dhikr,
+  istighfar, qiyam, Mulk) shown every night — the "initial" essentials never
+  rotate out. Between them it inserts TWO rotating slots, one each per night:
+  a أخلاق/قلب self-check (`AKHLAQ_CHECKS`, 7) and a بِرّ/حقوق-العباد deed
+  (`BIRR_DEEDS`, 6: صدقة / إطعام / صلة رحم / تفريج كربة / برّ الوالدين / عيادة
+  مريض). So a wider set of character + dealing-with-people topics is reviewed
+  across the days without the list growing; the two pools have different
+  lengths so the pairing varies too. Both advance one step per poll night via
+  `rotateForNight` (`floor(dayNumber/2)`, since the poll fires every other
+  night), tz-keyed/stateless like `isPollNight`. The QUESTION is framed as a
+  محاسبة for today AND a نيّة for tomorrow ("tick what you did today; what you
+  missed, resolve for tomorrow"), so a late or forward-looking reader still
+  benefits. Net option count: 10 most nights, 11 on Mon/Thu (the صيام option) —
+  Telegram raised the per-poll cap to **12** (Bot API 9.1, Jul 2025), so this
+  fits with headroom. Tests pin: exactly one أخلاق + one بِرّ each night, both
+  walk their whole pool, and the worship core is present every night.
 
 - **One ping per session (`silent` riders).** What makes people mute a
   channel is the number of separate notification moments, not the message
@@ -341,8 +351,10 @@ change the count by 1 and try again.
 3. The night poll → edit `src/content/poll.ts` (stay anonymous + multi;
    keep any emoji at the **end** of each option/question and leave a
    little margin under 100 chars — `rtlIsolate` adds 2; see below).
-   The base list is 9 items + one rotating بِرّ deed (`BIRR_DEEDS`) = 10
-   most nights; Mon/Thu nights add one fasting option → 11. Telegram now
+   The list is a fixed worship core (8: `CORE_WAKE` + `CORE_NIGHT`) + one
+   rotating أخلاق check (`AKHLAQ_CHECKS`) + one rotating بِرّ deed
+   (`BIRR_DEEDS`) = 10 most nights; Mon/Thu nights add one fasting option → 11.
+   Edit the pools to add topics; keep the worship core fixed. Telegram now
    allows **12** options per poll (Bot API 9.1), so there is headroom, but
    tests pin the exact counts. The poll fires every OTHER night (`isPollNight`
    - `night_review_poll.skipIf` — see the poll-cadence design note); to make

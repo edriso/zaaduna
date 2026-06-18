@@ -56,7 +56,7 @@ docs/DEPLOY.md    How to deploy
 | `friday_quiz`       | Friday 16:59     | Anonymous situational-adab **quiz** (موقف + best response, weekly)                 |
 | `fasting_reminder`  | Sun & Wed 21:40  | تذكير صيام الإثنين/الخميس (الليلة التي قبلها)             |
 | `pre_sleep`         | every day 21:43  | سورة المُلك + أذكار النوم + نيّة قيام الليل               |
-| `night_review_poll` | every other 21:45 | Anonymous self-review **poll** (deeds + a rotating بِرّ slot; Mon/Thu add صيام)   |
+| `night_review_poll` | every other 21:45 | Anonymous self-review **poll** (worship core + rotating أخلاق & بِرّ slots; Mon/Thu add صيام) |
 
 Both fasting touchpoints are **Hijri-aware**: the Mon/Thu reminder and
 the poll's «صيام» option are automatically withheld on days voluntary
@@ -173,10 +173,12 @@ Everything lives in source. No database; restart (or redeploy) to apply.
   keep the tone gentle (see the file header).
 - **The night poll:** edit `src/content/poll.ts` (the question and its
   options). Keep it anonymous and multiple-answer, that is the whole
-  point. The list is built at fire time: the 9 base deeds + one rotating
-  بِرّ (حقوق العباد) slot every night, and Monday/Thursday nights add a
+  point. The list is built at fire time: a fixed worship core (8) + one
+  rotating أخلاق check + one rotating بِرّ (حقوق العباد) deed every night, so
+  topics vary across days while the core stays; Monday/Thursday nights add a
   «صيام الاثنين/الخميس» option (withheld on Eid / أيام التشريق — see
-  `src/lib/hijri.ts`). Telegram now allows up to 12 options per poll.
+  `src/lib/hijri.ts`). The question is framed for today *and* tomorrow. Telegram
+  now allows up to 12 options per poll.
 - **Times or new entries:** edit `src/schedules.ts`. Each entry is one
   cron rule plus `kind: 'message'` (with `content`) or `kind: 'poll'`
   (with `poll`).
