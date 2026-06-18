@@ -1,4 +1,4 @@
-import { InlineKeyboard, type Bot, type Context } from 'grammy';
+import { InlineKeyboard, InputFile, type Bot, type Context } from 'grammy';
 import {
   Scheduler,
   pickContent,
@@ -13,6 +13,7 @@ import {
 } from 'telegram-broadcast-kit';
 import { schedules } from './schedules';
 import type { MessageSchedule, ScheduleDef } from './types';
+import { cardFor } from './content/cards';
 import { config } from './config';
 
 // The bot-specific schedule layer. The generic cron plumbing (error
@@ -97,6 +98,11 @@ async function sendForKind(bot: Bot<Context>, def: ScheduleDef): Promise<number 
     logger.warn('Schedule has no content to post, skipping', { name: def.name });
     return null;
   }
+  // Optional day-alternating card (light/dark), sent as a silent photo just
+  // above the text; replaced on the next fire. Non-fatal — see sendCard.
+  if (def.images) {
+    await sendCard(bot, def);
+  }
   const id = await post(bot, config.channelChatId, text, {
     name: def.name,
     silent: def.silent,
@@ -108,6 +114,42 @@ async function sendForKind(bot: Bot<Context>, def: ScheduleDef): Promise<number 
     await attachButtons(bot, id, def.buttons, def.name);
   }
   return id;
+}
+
+/**
+ * Send the day's azkar card (light on even civil days, dark on odd — see
+ * content/cards.ts) as a SILENT photo, and replace the previous card. The
+ * azkar text far exceeds Telegram's 1024-char photo caption, so the card is
+ * its own message just above the text. Tracked under a `${name}::card` state
+ * key, separate from the text ring buffer, so the text's replace-on-next-fire
+ * is untouched. Order is post-then-trim (send new, then delete old) so the
+ * channel is never card-less mid-swap. Non-fatal: a failure is logged and the
+ * text still posts (the card-less message stands).
+ */
+async function sendCard(bot: Bot<Context>, def: MessageSchedule): Promise<void> {
+  if (!def.images) return;
+  const path = cardFor(def.images);
+  const key = `${def.name}::card`;
+  let newId: number;
+  try {
+    const msg = await bot.api.sendPhoto(config.channelChatId, new InputFile(path), {
+      disable_notification: true,
+    });
+    newId = msg.message_id;
+    logger.info('Posted azkar card', { name: def.name, path, messageId: newId });
+  } catch (err) {
+    logger.warn('Failed to send azkar card; posting text only', {
+      name: def.name,
+      path,
+      error: String(err),
+    });
+    return;
+  }
+  const previous = getMessageIds(key);
+  await setMessageIds(key, [newId]);
+  for (const oldId of previous) {
+    await deleteMessage(bot, config.channelChatId, oldId, { name: key });
+  }
 }
 
 /**

@@ -48,7 +48,7 @@ docs/DEPLOY.md    How to deploy
 
 | Name                | When            | What                                                      |
 | ------------------- | --------------- | --------------------------------------------------------- |
-| `morning_azkar`     | every day 05:30  | أذكار الصباح                                              |
+| `morning_azkar`     | every day 05:30  | أذكار الصباح (+ بطاقة فاتحة/داكنة بالتناوب اليومي)        |
 | `morning_adab`      | every day 05:31  | وقفة في السُّنن والآداب وأخلاق القلب (تتناوب يوميًّا)     |
 | `friday_sunnah`     | Friday 05:32     | سنن الجمعة: طهارة وزينة، تبكير، الكهف، الصلاة على النبي ﷺ |
 | `akhlaq_reminder`   | every day 16:58  | وقفة في أخلاق المسلم وهَدْي النبي ﷺ (تتناوب يوميًّا)      |
@@ -156,6 +156,11 @@ pnpm send-test
 Everything lives in source. No database; restart (or redeploy) to apply.
 
 - **Message wording:** edit the matching file in `src/content/`.
+- **The azkar cards:** the three azkar attach a card image that alternates
+  light/dark by day (all three share the day's theme). To change the art,
+  replace the PNGs in `assets/cards/` keeping the
+  `{morningAzkar,eveningAzkar,preSleep}-{light,dark}-card.png` names. They are
+  sent as a silent photo above the azkar text. See `src/content/cards.ts`.
 - **The two daily reading libraries:** the morning reading is
   `adabReminders` in `src/content/adab.ts` (sunan/آداب/heart-akhlaq — what
   to DO today); the evening reading is `akhlaqReminders` in

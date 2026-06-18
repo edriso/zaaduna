@@ -23,12 +23,13 @@ import {
 function fakeBot() {
   const sendMessage = vi.fn().mockResolvedValue({ message_id: 11 });
   const sendPoll = vi.fn().mockResolvedValue({ message_id: 22 });
+  const sendPhoto = vi.fn().mockResolvedValue({ message_id: 33 });
   const deleteMessage = vi.fn().mockResolvedValue(true);
   const editMessageReplyMarkup = vi.fn().mockResolvedValue(true);
   const bot = {
-    api: { sendMessage, sendPoll, deleteMessage, editMessageReplyMarkup },
+    api: { sendMessage, sendPoll, sendPhoto, deleteMessage, editMessageReplyMarkup },
   } as unknown as Bot<Context>;
-  return { bot, sendMessage, sendPoll, deleteMessage, editMessageReplyMarkup };
+  return { bot, sendMessage, sendPoll, sendPhoto, deleteMessage, editMessageReplyMarkup };
 }
 
 // Wipe the in-memory pointer store between cases so one test's posts
@@ -142,7 +143,9 @@ describe('runSchedule replace-on-next-fire (messages only)', () => {
     const bot = {
       api: { sendMessage, sendPoll: vi.fn(), deleteMessage },
     } as unknown as Bot<Context>;
-    const def = findSchedule('morning_azkar')!;
+    // A plain message schedule (no card images) isolates the text ring
+    // buffer from the azkar card's separate cleanup (tested below).
+    const def: ScheduleDef = { name: 'ring_msg', kind: 'message', cron: '0 5 * * *', content: 'x' };
 
     await runSchedule(bot, def);
     await runSchedule(bot, def);
@@ -151,7 +154,7 @@ describe('runSchedule replace-on-next-fire (messages only)', () => {
     expect(sendMessage).toHaveBeenCalledTimes(2);
     expect(deleteMessage).toHaveBeenCalledTimes(1);
     expect(deleteMessage.mock.calls[0][1]).toBe(101);
-    expect(getLastMessageId('morning_azkar')).toBe(102);
+    expect(getLastMessageId('ring_msg')).toBe(102);
 
     // Post must happen before delete, never the other way around: in the
     // mock-call timeline the second sendMessage call records earlier
@@ -260,8 +263,20 @@ describe('runSchedule replace-on-next-fire (messages only)', () => {
     const bot = {
       api: { sendMessage, sendPoll: vi.fn(), deleteMessage },
     } as unknown as Bot<Context>;
-    const morning = findSchedule('morning_azkar')!;
-    const evening = findSchedule('evening_azkar')!;
+    // Two plain message schedules (no card images), to test pointer
+    // independence in isolation from the card cleanup.
+    const morning: ScheduleDef = {
+      name: 'ring_a',
+      kind: 'message',
+      cron: '0 5 * * *',
+      content: 'a',
+    };
+    const evening: ScheduleDef = {
+      name: 'ring_b',
+      kind: 'message',
+      cron: '0 5 * * *',
+      content: 'b',
+    };
 
     await runSchedule(bot, morning);
     await runSchedule(bot, evening);
@@ -272,8 +287,8 @@ describe('runSchedule replace-on-next-fire (messages only)', () => {
     expect(deleteMessage).toHaveBeenCalledTimes(2);
     const deletedIds = deleteMessage.mock.calls.map((c) => c[1]).sort();
     expect(deletedIds).toEqual([1, 2]);
-    expect(getLastMessageId('morning_azkar')).toBe(3);
-    expect(getLastMessageId('evening_azkar')).toBe(4);
+    expect(getLastMessageId('ring_a')).toBe(3);
+    expect(getLastMessageId('ring_b')).toBe(4);
   });
 });
 
@@ -316,6 +331,68 @@ describe('runSchedule inline buttons', () => {
     // The post and the ring-buffer pointer succeed even though buttons failed.
     expect(id).toBe(77);
     expect(getLastMessageId('friday_sunnah')).toBe(77);
+  });
+});
+
+describe('runSchedule azkar card', () => {
+  it('sends the card as a silent photo before the text, replacing it next fire', async () => {
+    const sendPhoto = vi
+      .fn()
+      .mockResolvedValueOnce({ message_id: 501 })
+      .mockResolvedValueOnce({ message_id: 502 });
+    const sendMessage = vi
+      .fn()
+      .mockResolvedValueOnce({ message_id: 11 })
+      .mockResolvedValueOnce({ message_id: 12 });
+    const deleteMessage = vi.fn().mockResolvedValue(true);
+    const bot = {
+      api: {
+        sendPhoto,
+        sendMessage,
+        sendPoll: vi.fn(),
+        deleteMessage,
+        editMessageReplyMarkup: vi.fn().mockResolvedValue(true),
+      },
+    } as unknown as Bot<Context>;
+    const def = findSchedule('morning_azkar')!;
+    expect(def.kind === 'message' && def.images).toBeTruthy();
+
+    await runSchedule(bot, def); // first fire
+    await runSchedule(bot, def); // second fire
+
+    // A card photo each fire, sent SILENT (the text is the audible anchor).
+    expect(sendPhoto).toHaveBeenCalledTimes(2);
+    expect(sendPhoto.mock.calls[0][2]?.disable_notification).toBe(true);
+    // The card is sent BEFORE the text within a fire.
+    expect(sendPhoto.mock.invocationCallOrder[0]).toBeLessThan(
+      sendMessage.mock.invocationCallOrder[0],
+    );
+    // Replace-on-next-fire: the first card (501) is deleted on the 2nd fire.
+    expect(deleteMessage.mock.calls.map((c) => c[1])).toContain(501);
+    // Card and text are tracked SEPARATELY: the text pointer holds the text
+    // id; the card lives under a `${name}::card` key.
+    expect(getLastMessageId('morning_azkar')).toBe(12);
+    expect(getMessageIds('morning_azkar::card')).toEqual([502]);
+  });
+
+  it('is non-fatal when the photo fails: the text still posts', async () => {
+    const sendPhoto = vi.fn().mockRejectedValue(new Error('413 image too big'));
+    const sendMessage = vi.fn().mockResolvedValue({ message_id: 60 });
+    const bot = {
+      api: {
+        sendPhoto,
+        sendMessage,
+        sendPoll: vi.fn(),
+        deleteMessage: vi.fn().mockResolvedValue(true),
+        editMessageReplyMarkup: vi.fn().mockResolvedValue(true),
+      },
+    } as unknown as Bot<Context>;
+    const def = findSchedule('evening_azkar')!;
+
+    const id = await runSchedule(bot, def);
+
+    expect(id).toBe(60); // text posted despite the card send failing
+    expect(getMessageIds('evening_azkar::card')).toEqual([]); // no card tracked
   });
 });
 

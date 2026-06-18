@@ -41,6 +41,11 @@ RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 
 COPY --from=builder /app/dist ./dist
 
+# Static assets the runtime reads from disk (azkar card images, sent by
+# scheduler.ts#sendCard via paths relative to the workdir). tsc does not copy
+# non-TS files into dist, so bring them in explicitly.
+COPY assets ./assets
+
 # The bot writes a tiny JSON pointer file under ./data at runtime
 # (see src/lib/state.ts). Pre-create the dir and hand it to the node
 # user so the drop-privileges step below does not break writes.
