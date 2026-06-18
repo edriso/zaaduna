@@ -3,8 +3,10 @@ import { eveningAzkar } from './content/eveningAzkar';
 import { preSleepReminder } from './content/preSleep';
 import { fridaySunnah } from './content/fridaySunnah';
 import { akhlaqReminders } from './content/akhlaq';
+import { adabReminders } from './content/adab';
 import { fastingReminder } from './content/fasting';
 import { buildNightReviewPoll, isPollNight } from './content/poll';
+import { buildWeeklyQuiz } from './content/quiz';
 import { azkarHtml } from './content/format';
 import { fastForbiddenTomorrow } from './lib/hijri';
 import { config } from './config';
@@ -32,13 +34,21 @@ export type { ScheduleDef } from './types';
  * fires every OTHER night ("a night yes, a night no" — see isPollNight),
  * so the bedtime ping lands every second night; the off-night bedtime
  * window is silent (pre_sleep carries no buzz). Net: 3 pings on a poll
- * night, 2 on an off night. The akhlaq/Friday/fasting riders still arrive,
- * just without a buzz.
+ * night, 2 on an off night. The riders (morning adab, akhlaq, Friday
+ * sunnah, the Friday quiz, the fasting nudge, pre-sleep) all arrive, just
+ * without a buzz.
+ *
+ * Two readings a day, both silent riders: the morning ADAB (05:31, the
+ * سُنن/آداب/أخلاق-القلب library — what to DO today) rides after the morning
+ * azkar; the evening AKHLAQ (16:58, the character/shamail library — who to
+ * BE) rides before the evening azkar. Two separate growing libraries,
+ * rotated independently (content/adab.ts and content/akhlaq.ts).
  *
  * In the evening window the akhlaq reminder fires FIRST (16:58, silent),
- * then the evening azkar rings (17:00) and sits newest at the bottom. So
- * the reader opens on the audible azkar and finds the day's akhlaq vignette
- * one message above it — a short reflection, then the dhikr to act on.
+ * then on Fridays the weekly «مواقف الآداب» quiz (16:59, silent), then the
+ * evening azkar rings (17:00) and sits newest at the bottom. So the reader
+ * opens on the audible azkar and finds the day's vignette (and the Friday
+ * quiz) just above it — a short reflection, then the dhikr to act on.
  *
  * In the bedtime window the poll fires LAST (fasting → pre-sleep → poll),
  * so it sits newest at the bottom; its last option «سورة المُلك وأذكار
@@ -59,6 +69,25 @@ export const schedules: ScheduleDef[] = [
     content: azkarHtml(morningAzkar),
     parseMode: 'HTML',
     description: 'أذكار الصباح، كل يوم 5:30 ص (داخل وقت الذكر بين الفجر وطلوع الشمس طوال السنة).',
+  },
+  {
+    name: 'morning_adab',
+    kind: 'message',
+    // 05:31 Cairo, 1 min after morning_azkar (one morning ping). The morning
+    // READING: a sunnah/adab or a work of the heart to live by today. Pairs
+    // with the evening akhlaq_reminder (character/shamail) for 2 readings a
+    // day — see content/adab.ts vs content/akhlaq.ts.
+    cron: '31 5 * * *',
+    content: adabReminders,
+    // Deterministic day-of-year rotation, independent of the evening library
+    // (a separate pool, so the two never collide on the same day).
+    selection: 'daily',
+    // Growing archive — never replaced (same design as akhlaq_reminder).
+    keepLast: 0,
+    // Silent: rides 1 min after morning_azkar, so the morning keeps one ping.
+    silent: true,
+    description:
+      'وقفةٌ صباحيّة في السُّنن والآداب وأخلاق القلب (بالتناوب اليوميّ)، كل يوم 5:31 ص (صامت، مع أذكار الصباح). مكتبةٌ متنامية لا يُحذَف منها شيء.',
   },
   {
     name: 'friday_sunnah',
@@ -111,6 +140,23 @@ export const schedules: ScheduleDef[] = [
     content: azkarHtml(eveningAzkar),
     parseMode: 'HTML',
     description: 'أذكار المساء، كل يوم 5:00 م. الأفضل قراءتها بين العصر والمغرب.',
+  },
+  {
+    name: 'friday_quiz',
+    kind: 'poll',
+    // 16:59 Cairo on Fridays, 1 min before evening_azkar (rides its ping).
+    // The weekly situational-adab QUIZ: a موقف + the best response, anonymous,
+    // one correct answer + an explanation shown after voting. Rotates weekly
+    // through content/quiz.ts; sits just above the evening azkar.
+    cron: '59 16 * * 5',
+    poll: () => buildWeeklyQuiz(),
+    // Silent: part of the Friday evening session; evening_azkar carries the ping.
+    silent: true,
+    // keepLast omitted → poll default 0: never tracked, never deleted, so the
+    // quizzes build a browsable archive (like the akhlaq library) and each
+    // stays open its ~6 days without being replaced.
+    description:
+      'استبيانُ «مواقف الآداب» (تعلُّمٌ أسبوعيّ، سرّيّ): موقفٌ وأحسنُ تصرّف، الجمعة 4:59 م (صامت، مع أذكار المساء). يدور أسبوعيًّا ويبقى أرشيفًا.',
   },
   {
     name: 'fasting_reminder',

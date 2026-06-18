@@ -7,16 +7,18 @@ import { noFastReason } from '../lib/hijri';
  * (not even the bot) sees who voted — only aggregate percentages. No DB,
  * no riya.
  *
- * Built per fire by buildNightReviewPoll: a single BASE_OPTIONS list with
- * the day's extras spliced in from OPTIONS_BY_DAY (keyed by weekday in
- * TZ_NAME). Adding a day-specific list later (e.g. Friday) is one entry
- * in that table — no branching in the function, and one schedule + one
- * state key keeps replace-on-next-fire intact.
+ * Built per fire by buildNightReviewPoll: the 9 BASE_OPTIONS, plus one
+ * rotating بِرّ (حقوق العباد) deed every night (see BIRR_DEEDS), plus the
+ * day's extras spliced in from OPTIONS_BY_DAY (keyed by weekday in TZ_NAME).
+ * So the list is 10 most nights, 11 on Mon/Thu (the صيام option). Adding a
+ * day-specific list later (e.g. Friday) is one entry in that table — no
+ * branching in the function, and one schedule + one state key keeps
+ * replace-on-next-fire intact.
  *
- * Telegram limits: question ≤300 chars, 2..10 options, each ≤100. Keep
- * the emoji at the END of each string (a leading emoji collides with the
- * vote %/count Telegram appends) and leave a little margin — rtlIsolate
- * in lib/post.ts adds 2 chars.
+ * Telegram limits: question ≤300 chars, 2..12 options (the cap was raised
+ * from 10 to 12 in Bot API 9.1, Jul 2025), each ≤100. Keep the emoji at the
+ * END of each string (a leading emoji collides with the vote %/count Telegram
+ * appends) and leave a little margin — rtlIsolate in lib/post.ts adds 2 chars.
  *
  * Wording principle: every option is an HONEST effort you can tick
  * without lying or feeling defeated («ولو ركعتين», «أدومها وإن قلّ») —
@@ -64,6 +66,38 @@ interface DayOption {
 // Insert fasting after خشوع الصلاة (last of the day's worship), before
 // the pre-sleep cluster.
 const FASTING_ANCHOR = 'اجتهدت في خشوع صلاتي وطمأنينتها، وقُلت أذكار ما بعد الصلاة المفروضة 🕌';
+
+// The بِرّ (حقوق العباد) slot — one rotating "did you do good to others
+// today?" option, so the review covers dealing with people (charity,
+// feeding, kinship, relieving a burden, visiting the sick), not only
+// personal worship. It rides in a SINGLE option so the poll stays small;
+// the deed rotates night to night to cover the whole list over time.
+// Emoji at the END (poll bidi convention; see header). Each stays < 100
+// chars after rtlIsolate's +2.
+export const BIRR_DEEDS: readonly string[] = [
+  'تصدّقتُ اليوم ولو بالقليل 💝',
+  'أطعمتُ طعامًا أو سقيتُ، أو أعنتُ محتاجًا 🍲',
+  'وصلتُ رحمًا، أو سألتُ عن قريبٍ أو صديق 📞',
+  'نفّستُ كربةَ مهموم، أو قضيتُ حاجةَ أحد 🤝',
+  'عُدتُ مريضًا، أو دعوتُ لمن يشتكي 🌿',
+];
+
+// Insert the بِرّ deed right after the akhlaq option, so the two
+// "dealing with people" items (guarding the tongue + a deed for others)
+// sit together, between the day's worship and the pre-sleep cluster.
+const BIRR_ANCHOR = 'حفظت لساني عن الغِيبة، ولم يَغلِبني الغضب (طوّلت بالي ولِنتُ لمن حولي) 🤍';
+
+/**
+ * The night's بِرّ deed. Rotates ONE step per poll night: the poll fires
+ * every other night (isPollNight keys off dayNumberInTz parity), so
+ * dividing the day number by 2 advances the deed exactly once per fire
+ * and walks the whole list in order. tz-keyed and stateless, same
+ * discipline as isPollNight — a given poll night always shows the same
+ * deed, and consecutive poll nights differ.
+ */
+function birrDeedFor(now: Date, tz: string): string {
+  return BIRR_DEEDS[Math.floor(dayNumberInTz(now, tz) / 2) % BIRR_DEEDS.length];
+}
 
 // Weekday in TZ_NAME (0=Sun..6=Sat) → options to add that night. THE
 // EDIT POINT for day variants: add a key (e.g. 5 for a Friday list) here;
@@ -145,7 +179,10 @@ export function buildNightReviewPoll(
   // day option survives. The base nine deeds always stand.
   const allExtras = OPTIONS_BY_DAY[day] ?? [];
   const extras = noFastReason(now, tz) ? allExtras.filter((e) => !e.fasting) : allExtras;
-  const options = applyDayOptions(BASE_OPTIONS, extras);
+  // The بِرّ (حقوق العباد) slot is added every night, ahead of any
+  // day-specific fasting extra; applyDayOptions splices each at its anchor.
+  const birr: DayOption = { option: birrDeedFor(now, tz), after: BIRR_ANCHOR };
+  const options = applyDayOptions(BASE_OPTIONS, [birr, ...extras]);
 
   return {
     question: QUESTION,
