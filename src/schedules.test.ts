@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { existsSync } from 'node:fs';
 import cron from 'node-cron';
 import { schedules, findSchedule } from './schedules';
 import { MIN_CLOSE_HOURS, MAX_CLOSE_HOURS, rtlIsolate } from 'telegram-broadcast-kit';
@@ -142,6 +143,29 @@ describe('akhlaq_reminder (daily-rotation library)', () => {
     const evening = findSchedule('evening_azkar');
     expect(akhlaq && evening).toBeTruthy();
     expect(minutes(akhlaq!.cron)).toBeLessThan(minutes(evening!.cron));
+  });
+});
+
+describe('azkar card images', () => {
+  // The three azkar carry a day-alternating { light, dark } card. Pin that
+  // they are wired and the files exist (so a missing asset fails CI, not prod).
+  for (const name of ['morning_azkar', 'evening_azkar', 'pre_sleep']) {
+    it(`${name} has light + dark card images that exist on disk`, () => {
+      const s = findSchedule(name);
+      expect(s?.kind).toBe('message');
+      if (s?.kind !== 'message') throw new Error(`${name} must be a message`);
+      expect(s.images, `${name} should have images`).toBeDefined();
+      expect(existsSync(s.images!.light), `missing ${s.images!.light}`).toBe(true);
+      expect(existsSync(s.images!.dark), `missing ${s.images!.dark}`).toBe(true);
+    });
+  }
+
+  it('only the three azkar carry card images', () => {
+    const withImages = schedules
+      .filter((s) => s.kind === 'message' && s.images)
+      .map((s) => s.name)
+      .sort();
+    expect(withImages).toEqual(['evening_azkar', 'morning_azkar', 'pre_sleep']);
   });
 });
 

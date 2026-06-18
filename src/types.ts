@@ -117,6 +117,18 @@ export interface MessageSchedule extends BaseSchedule {
    * See scheduler.ts#attachButtons.
    */
   buttons?: readonly (readonly { text: string; url: string }[])[];
+  /**
+   * Optional day-alternating card image. A `light` card on even civil days, a
+   * `dark` card on odd ones (see content/cards.ts → cardThemeFor), so all
+   * three azkar share the day's theme and consecutive days alternate. It is
+   * sent as a SILENT separate photo just before the text — Telegram's
+   * 1024-char photo caption can't hold the full azkar — and replaced on the
+   * next fire like the text (tracked under a `${name}::card` state key, so the
+   * text ring buffer is untouched). A send failure is logged and non-fatal
+   * (the text still posts). Paths resolve from the project root (cwd). See
+   * scheduler.ts#sendCard.
+   */
+  images?: { light: string; dark: string };
 }
 
 /** Sends one anonymous poll. `poll` may be a fixed spec or a factory

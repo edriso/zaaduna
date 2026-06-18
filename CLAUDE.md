@@ -40,7 +40,9 @@ zaaduna/
 │   ├── schedules.ts    THE EDIT POINT: the schedule list + findSchedule
 │   ├── types.ts        ScheduleDef union + PollSpec (no import cycle)
 │   ├── content/        Arabic content modules + poll spec + welcome.ts + format.ts (azkar HTML) + akhlaq.ts (evening daily-rotation library) + adab.ts (morning daily-rotation library) + quiz.ts (weekly situational-adab quiz)
+│   ├── content/cards.ts  azkar card theme (light/dark by day) + path helper
 │   └── lib/            hijri (Umm al-Qura no-fast days)
+├── assets/cards/       azkar card PNGs (light/dark), copied into the image
 ├── scripts/
 │   ├── send-test.ts       Manual dev sender (not imported by the app)
 │   └── post-welcome.ts    Manual welcome-message post/edit (not imported)
@@ -267,6 +269,27 @@ explanation`); the bot's local `PollSpec` mirrors those fields.
   button-less message still stands). No extra admin right is needed — the bot
   edits its own message. If you want this shared across the other bots, move
   the `reply_markup` passthrough into `telegram-broadcast-kit` and ship a tag.
+- **Day-alternating azkar cards (light/dark).** The three azkar
+  (morning/evening/pre-sleep) each attach a card image that alternates by the
+  civil date in `config.timezone`: a **light** card on even day-numbers, a
+  **dark** one on odd — so all three share the day's theme and consecutive days
+  swap ("a day light, a day dark"). The theme is `content/cards.ts →
+cardThemeFor` (epoch day-parity, tz-keyed/stateless, same discipline as
+  `isPollNight`); paths come from `azkarCard(base)` and are set on the schedule
+  entry (`types.ts → MessageSchedule.images: { light, dark }`). The azkar text
+  far exceeds Telegram's **1024-char photo caption**, so the card is its OWN
+  message — a **silent** photo (`disable_notification`) sent just ABOVE the
+  text, so the text stays the audible anchor and the one-ping rule holds. The
+  kit has no photo helper, so `scheduler.ts#sendCard` calls `bot.api.sendPhoto`
+  directly (like `attachButtons` uses `editMessageReplyMarkup`). It is tracked
+  under a separate `${name}::card` state key with its own replace-on-next-fire
+  (send new, then delete previous), so the text ring buffer is untouched; a
+  send failure is logged and non-fatal (the card-less text still posts). The
+  images live in **`assets/cards/`** and are copied into the Docker image
+  explicitly (`Dockerfile` — `tsc` does not copy non-TS files into `dist/`).
+  Telegram photo limits respected: width+height ≤ 10000, ratio ≤ 20, ≤ 10MB
+  (the cards are ~3360×≤6500). To swap art, replace the PNGs in `assets/cards/`
+  keeping the `{base}-{light,dark}-card.png` names.
 - **Poll options are `InputPollOption` objects.** Bot API 7.3+ changed
   `options` from strings to `{ text }[]`; `lib/post.ts` does the map.
 - **Poll text is bidi-isolated (`rtlIsolate`).** Each option + the
@@ -455,7 +478,12 @@ and deterministic), and `content/quiz.ts` (the weekly quiz: pool health +
 every Telegram quiz constraint — options 2–4, distinct, ≤100, explanation
 ≤200 with ≤2 line breaks, `correctIndex` in range, varied correct slot — plus
 `buildWeeklyQuiz` weekly rotation that is deterministic, tz-keyed, and walks
-the whole pool before repeating).
+the whole pool before repeating), and the azkar cards (`content/cards.ts`:
+`cardThemeFor` alternates light/dark each civil day, all three azkar share the
+day's theme, tz-keyed + deterministic, and the PNG files exist on disk; plus
+`scheduler.ts` — a card is sent as a SILENT photo before the text, replaced on
+the next fire under a separate `${name}::card` key, and a photo failure is
+non-fatal so the text still posts).
 The count is intentionally not stated here so it never goes stale.
 
 `pnpm check` runs `typecheck` + `format:check` + `test` — the same gate
