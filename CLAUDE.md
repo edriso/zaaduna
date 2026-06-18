@@ -9,6 +9,20 @@ purpose: Telegram aggregates the votes and shows percentages to everyone,
 nobody (including this bot) learns who voted. That delivers community
 motivation with no riya and no DB.
 
+It posts **two short readings a day** from two independent growing
+libraries: a morning «آداب وسنن وأخلاق القلب» reading (`content/adab.ts` —
+what to DO today) and an evening «أخلاق وشمائل» reading (`content/akhlaq.ts`
+— who to BE). On top of the nightly review poll it also runs a **weekly
+anonymous situational-adab quiz** every Friday (`content/quiz.ts`: a موقف +
+the best response + an explanation, Telegram quiz-mode), and the night poll
+carries a rotating **بِرّ (حقوق العباد)** option so the محاسبة covers
+dealing with people, not only personal worship. All the extra posts ride
+**silently** inside existing sessions, so the calm "one ping per session"
+cadence is unchanged. **Authenticity note:** the large content libraries
+were drafted with takhreej in the comments and every grading flagged
+`[راجعه طالب علم]`; a trusted طالب علم review is still required before launch
+(the same rule as the rest of `src/content/`).
+
 Repeating reminders (azkar) auto-replace each other — the channel keeps
 one live copy per schedule, not a year of identical dupes. Polls and
 any human-posted message (your welcome / pinned intro) are never
@@ -25,7 +39,7 @@ zaaduna/
 │   ├── scheduler.ts    runSchedule() dispatch + ring-buffer (cron registry from the kit)
 │   ├── schedules.ts    THE EDIT POINT: the schedule list + findSchedule
 │   ├── types.ts        ScheduleDef union + PollSpec (no import cycle)
-│   ├── content/        Arabic content modules + poll spec + welcome.ts + format.ts (azkar HTML) + akhlaq.ts (daily-rotation library)
+│   ├── content/        Arabic content modules + poll spec + welcome.ts + format.ts (azkar HTML) + akhlaq.ts (evening daily-rotation library) + adab.ts (morning daily-rotation library) + quiz.ts (weekly situational-adab quiz)
 │   └── lib/            hijri (Umm al-Qura no-fast days)
 ├── scripts/
 │   ├── send-test.ts       Manual dev sender (not imported by the app)
@@ -103,13 +117,50 @@ refer to those kit modules. To change shared code, edit the kit and ship a new t
     The code is in `scheduler.ts#sendForKind` (it checks `selection`);
     `content/akhlaq.ts` holds the list; a test checks two days never repeat.
 
+- **Two reading libraries (morning + evening).** The same daily-rotation
+  pattern runs TWICE a day from two independent pools, so a follower gets
+  two short, different readings: `morning_adab` (`content/adab.ts`, 05:31,
+  silent) is the **آداب/سنن/أخلاق القلب** library — a practice to live by
+  today — and `akhlaq_reminder` (`content/akhlaq.ts`, 16:58, silent) is the
+  **أخلاق/شمائل** library — a character to reflect on. Separate arrays, so
+  `pickForDay` never collides on the same day; each carries `selection:
+'daily'` + `keepLast: 0` (a growing archive). Both stay near the **optimal
+  spacing zone** the UX/learning research pointed to (a ~few-week-or-more
+  repeat gap), so growing a pool is the right maintenance — don't shrink it.
+  Each file has a min-gap test; the library SIZE matters at the Jan-1 reset,
+  so if you change a count and the test goes red, nudge it by 1 (akhlaq is
+  79, adab 66 — both chosen to pass).
+
+- **Weekly situational-adab quiz (`content/quiz.ts`, `friday_quiz`).** A
+  Telegram **quiz poll** (`type: 'quiz'`): a موقف + 2–4 options, ONE correct,
+  plus an `explanation` (≤200 chars) shown after voting. Anonymous, no
+  scoring, framed as learning («موقفٌ نتعلّم منه») not a piety test. Fires
+  every Friday and rotates **weekly** (`weekNumberInTz`), riding silently
+  before the evening azkar; `keepLast` defaults to 0 so quizzes accumulate as
+  a browsable archive. **Hard rule:** only adab that is agreed-upon / grounded
+  in explicit nass — never contested fiqh, never a halal/haram ruling (the
+  quiz format cannot express "it depends"). A quiz can't be edited after
+  votes start, so the طالب علم review must happen **before** it fires. The
+  kit's `sendPoll` already supports quiz mode (`PollSpec.type/correctOptionId/
+explanation`); the bot's local `PollSpec` mirrors those fields.
+
+- **The night poll's rotating بِرّ slot.** `buildNightReviewPoll` adds ONE
+  rotating حقوق-العباد deed every night (`BIRR_DEEDS`: صدقة / إطعام / صلة رحم
+  / تفريج كربة / عيادة مريض) after the akhlaq option, so the محاسبة covers
+  dealing with people. It advances one step per poll night
+  (`floor(dayNumber/2)`, since the poll fires every other night) and is
+  tz-keyed/stateless like `isPollNight`. Net option count: 10 most nights, 11
+  on Mon/Thu (the صيام option). Telegram raised the per-poll cap to **12**
+  (Bot API 9.1, Jul 2025), so this fits with headroom.
+
 - **One ping per session (`silent` riders).** What makes people mute a
   channel is the number of separate notification moments, not the message
   count. So each session has one anchor that rings and the rest ride in
   with `silent: true` (Telegram `disable_notification`): they still appear
   in the channel, they just do not buzz. Anchors (ring): `morning_azkar`,
-  `evening_azkar`, `night_review_poll`. Riders (silent): `friday_sunnah`
-  (after the morning azkar), `akhlaq_reminder` (before the evening azkar),
+  `evening_azkar`, `night_review_poll`. Riders (silent): `morning_adab`
+  (after the morning azkar), `friday_sunnah` (after the morning azkar),
+  `akhlaq_reminder` and `friday_quiz` (before the evening azkar),
   `fasting_reminder` and `pre_sleep` (before the night poll). Net: **3 pings
   on a poll night, 2 on an off night** — the night poll fires every other
   night (see the poll-cadence note below), and on its off nights the bedtime
@@ -258,38 +309,48 @@ authentication dispute even if one grader passes them (the «أدِّ الأما
 … ولا تخن من خانك» wording was dropped for exactly this — Albani graded it
 sahih but al-Shafiʿi, Abu Hatim, Ibn al-Jawzi and Ibn Hajar weakened it).
 
+The same authenticity discipline applies to the morning **`content/adab.ts`**
+library (streams 📿 سُنن/آداب، 🤲 أخلاق القلب، 🚫 ما نتجنّبه) and the weekly
+**`content/quiz.ts`** scenarios — every marfūʿ text sahih/hasan with takhreej
+in its comment, all flagged `[راجعه طالب علم]` pending the one required review.
+
 **The list size also controls how soon a post repeats, in a non-obvious
 way.** `pickForDay` picks by day-of-the-year, so a post normally comes back
 every `length` days. But on Jan 1 the day counter resets, which can make a
-few posts come back sooner, and how much sooner depends a lot on the size:
-41 items keeps the shortest gap at 37 days, but 40 or 45 items drop it to
-about 5 days. The list is currently **41** (chosen on purpose). A test in
-`akhlaq.test.ts` measures the shortest gap and fails on a bad size. Keep the
-list at 28 or more, and if you change the count, run the tests; if the
-min-gap test goes red, change the count by 1 and try again.
+few posts come back sooner, and how much sooner depends a lot on the size. So
+the counts are chosen on purpose: **akhlaq.ts is 79, adab.ts is 66** (both
+clear the min-gap test's floor). A test in `akhlaq.test.ts` / `adab.test.ts`
+measures the shortest gap and fails on a bad size. Keep each list at 28 or
+more, and if you change a count, run the tests; if the min-gap test goes red,
+change the count by 1 and try again.
 
 ## How to change what it posts
 
 1. Message text → edit the file in `src/content/`.
-   - The daily akhlaq items → edit the `akhlaqReminders` array in
-     `src/content/akhlaq.ts`. Each entry is one short post (stream emoji +
-     title, then body), with its source in the comment above it. The items
-     are mixed so the four kinds (خُلُق / هَدْي النبي ﷺ / صحابة / حِكَم)
-     take turns day to day; keep the list at 28+ and every saying about the
-     Prophet ﷺ sahih or hasan. See the authenticity note above.
-2. The poll → edit `src/content/poll.ts` (stay anonymous + multi;
+   - The two daily readings → edit `akhlaqReminders` in `src/content/akhlaq.ts`
+     (evening: خُلُق / هَدْي النبي ﷺ / صحابة / حِكَم) and `adabReminders` in
+     `src/content/adab.ts` (morning: 📿 سُنن وآداب / 🤲 أخلاق القلب / 🚫 ما
+     نتجنّبه). Each entry is one short post (stream emoji + title, then body),
+     with its source in the comment above it; items are mixed so the streams
+     take turns day to day. Keep each list at 28+ and every saying about the
+     Prophet ﷺ sahih or hasan. See the authenticity + list-size notes above.
+2. The weekly quiz → edit `adabQuizzes` in `src/content/quiz.ts` (a موقف +
+   2–4 options + the correct index + a ≤200-char explanation). Anonymous
+   quiz-mode, agreed-upon adab only (never contested fiqh), gentle tone; the
+   طالب علم review must come **before** it fires (no editing after votes).
+3. The night poll → edit `src/content/poll.ts` (stay anonymous + multi;
    keep any emoji at the **end** of each option/question and leave a
    little margin under 100 chars — `rtlIsolate` adds 2; see below).
-   The base list is 9 items; Mon/Thu nights add one fasting option,
-   so the total stays ≤ 10 (Telegram's hard max). If you grow the
-   base list above 9, the Mon/Thu variant overflows — tests will
-   catch it. The poll fires every OTHER night (`isPollNight` +
-   `night_review_poll.skipIf` — see the poll-cadence design note); to make
-   it nightly again, drop that `skipIf` in `schedules.ts`, and to shift
-   which nights it lands on, flip the `=== 0` in `isPollNight`.
-3. Times / new schedules → edit `src/schedules.ts`.
+   The base list is 9 items + one rotating بِرّ deed (`BIRR_DEEDS`) = 10
+   most nights; Mon/Thu nights add one fasting option → 11. Telegram now
+   allows **12** options per poll (Bot API 9.1), so there is headroom, but
+   tests pin the exact counts. The poll fires every OTHER night (`isPollNight`
+   - `night_review_poll.skipIf` — see the poll-cadence design note); to make
+     it nightly again, drop that `skipIf` in `schedules.ts`, and to shift
+     which nights it lands on, flip the `=== 0` in `isPollNight`.
+4. Times / new schedules → edit `src/schedules.ts`.
    The framework code does not need to change.
-4. Sura/reference links under a message → edit that schedule's `buttons`
+5. Sura/reference links under a message → edit that schedule's `buttons`
    in `src/schedules.ts` (rows of `{ text, url }`); the welcome's are in
    `src/content/welcome.ts` → `welcomeButtons`. Use `https://` URLs and
    keep button text short. See the inline-buttons design note above.
@@ -372,9 +433,17 @@ and `renderedText` round-tripping the HTML back to the byte-exact plain source
 so the 4096 check measures what Telegram renders), the inline-button specs (every button has non-empty
 text and an `https://` URL; `runSchedule` attaches them via
 `editMessageReplyMarkup` only when present and a failed attach is
-non-fatal), and `lib/hijri.ts` (Umm al-Qura mapping; Eid/Tashreeq
+non-fatal), `lib/hijri.ts` (Umm al-Qura mapping; Eid/Tashreeq
 suppression incl. the +1 day-14 cushion; عرفة and ستّ من شوّال never
-suppressed; the poll drops «صيام» on a Tashreeq day).
+suppressed; the poll drops «صيام» on a Tashreeq day), the morning
+`content/adab.ts` library (same pool-health + daily-rotation + min-gap
+guards as akhlaq, with its 📿/🤲/🚫 streams), the night poll's بِرّ slot
+(exactly one rotating deed every night, advances once per poll night, tz-keyed
+and deterministic), and `content/quiz.ts` (the weekly quiz: pool health +
+every Telegram quiz constraint — options 2–4, distinct, ≤100, explanation
+≤200 with ≤2 line breaks, `correctIndex` in range, varied correct slot — plus
+`buildWeeklyQuiz` weekly rotation that is deterministic, tz-keyed, and walks
+the whole pool before repeating).
 The count is intentionally not stated here so it never goes stale.
 
 `pnpm check` runs `typecheck` + `format:check` + `test` — the same gate

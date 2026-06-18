@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import cron from 'node-cron';
 import { schedules, findSchedule } from './schedules';
 import { MIN_CLOSE_HOURS, MAX_CLOSE_HOURS, rtlIsolate } from 'telegram-broadcast-kit';
-import { buildNightReviewPoll, isPollNight } from './content/poll';
+import { buildNightReviewPoll, isPollNight, BIRR_DEEDS } from './content/poll';
 import { renderedText } from './content/format';
 import { hijriDate } from './lib/hijri';
 import type { PollSpec } from './types';
@@ -148,8 +148,10 @@ describe('akhlaq_reminder (daily-rotation library)', () => {
 describe('poll schedules', () => {
   const pollSchedules = schedules.filter((s) => s.kind === 'poll');
 
-  it('there is exactly one poll schedule (the nightly review)', () => {
-    expect(pollSchedules.length).toBe(1);
+  it('has the two poll schedules: the nightly review and the weekly quiz', () => {
+    expect(pollSchedules.length).toBe(2);
+    expect(findSchedule('night_review_poll')?.kind).toBe('poll');
+    expect(findSchedule('friday_quiz')?.kind).toBe('poll');
   });
 
   // Resolve a schedule's `poll` whether it is a fixed spec or a factory.
@@ -171,7 +173,8 @@ describe('poll schedules', () => {
     );
 
     expect(p.options.length, `${label} options count`).toBeGreaterThanOrEqual(2);
-    expect(p.options.length, `${label} options count`).toBeLessThanOrEqual(10);
+    // Telegram raised the per-poll option cap to 12 (Bot API 9.1, Jul 2025).
+    expect(p.options.length, `${label} options count`).toBeLessThanOrEqual(12);
     for (const opt of p.options) {
       expect(opt.trim().length, `${label} option empty`).toBeGreaterThan(0);
       expect(rtlIsolate(opt).length, `${label} option too long: ${opt}`).toBeLessThanOrEqual(
@@ -206,11 +209,11 @@ describe('poll schedules', () => {
     }
   });
 
-  // buildNightReviewPoll varies by day-of-week in TZ_NAME: Mon/Thu add
-  // a «صيام الاثنين/الخميس» option, taking the list to Telegram's max
-  // of 10. Iterate every weekday so a future tweak that overflows the
-  // limit, drops a key, or duplicates an option fails the suite
-  // regardless of which day the CI run happens to be.
+  // buildNightReviewPoll has a base of 9 deeds + 1 rotating بِرّ (حقوق
+  // العباد) slot = 10 every night; Mon/Thu add a «صيام الاثنين/الخميس»
+  // option → 11 (still under Telegram's 12 cap). Iterate every weekday so a
+  // future tweak that overflows the limit, drops a key, or duplicates an
+  // option fails the suite regardless of which day the CI run happens to be.
   describe('night review poll — day-of-week variants', () => {
     // 2024-12-01 is a Sunday (UTC). Add N days for each weekday.
     const SUNDAY = new Date('2024-12-01T21:45:00Z');
@@ -230,9 +233,9 @@ describe('poll schedules', () => {
       const thu = buildNightReviewPoll(new Date(SUNDAY.getTime() + 4 * 86400000), 'UTC');
       const wed = buildNightReviewPoll(new Date(SUNDAY.getTime() + 3 * 86400000), 'UTC');
 
-      expect(mon.options.length).toBe(10);
-      expect(thu.options.length).toBe(10);
-      expect(wed.options.length).toBe(9);
+      expect(mon.options.length).toBe(11); // 9 base + بِرّ + صيام
+      expect(thu.options.length).toBe(11);
+      expect(wed.options.length).toBe(10); // 9 base + بِرّ (no fasting)
 
       expect(mon.options.some((o) => o.includes('صيام الاثنين'))).toBe(true);
       expect(thu.options.some((o) => o.includes('صيام الخميس'))).toBe(true);
@@ -245,14 +248,48 @@ describe('poll schedules', () => {
     it('drops the fasting option on a Tashreeq Monday', () => {
       const tashreeqMon = buildNightReviewPoll(new Date('2024-06-17T18:45:00Z'), 'Africa/Cairo');
       expect(tashreeqMon.options.some((o) => o.includes('صيام'))).toBe(false);
-      expect(tashreeqMon.options.length).toBe(9);
+      expect(tashreeqMon.options.length).toBe(10); // 9 base + بِرّ, fasting dropped
     });
 
     it('keeps the fasting option on an ordinary Monday', () => {
       // Mon 2024-06-10 = 4 ذو الحجة — fasting allowed.
       const normalMon = buildNightReviewPoll(new Date('2024-06-10T18:45:00Z'), 'Africa/Cairo');
       expect(normalMon.options.some((o) => o.includes('صيام الاثنين'))).toBe(true);
-      expect(normalMon.options.length).toBe(10);
+      expect(normalMon.options.length).toBe(11); // 9 base + بِرّ + صيام
+    });
+  });
+
+  // The بِرّ (حقوق العباد) slot: one rotating "did you do good to others?"
+  // option every night, so the review covers dealing with people. It rotates
+  // once per poll night and is tz-keyed/stateless, like isPollNight.
+  describe('night review poll — بِرّ (حقوق العباد) slot', () => {
+    const TZ = 'Africa/Cairo';
+    it('always includes exactly one بِرّ deed', () => {
+      // Check a span of nights; every one carries exactly one of the deeds.
+      for (let i = 0; i < 14; i++) {
+        const d = new Date(Date.UTC(2026, 5, 10, 18, 45) + i * 86_400_000);
+        const p = buildNightReviewPoll(d, TZ);
+        const present = BIRR_DEEDS.filter((deed) => p.options.includes(deed));
+        expect(present.length, `night ${i} should have one بِرّ deed`).toBe(1);
+      }
+    });
+
+    it('rotates one step per poll night, and walks the whole list', () => {
+      // Poll fires every other night, so step by 2 days between fires.
+      const seen: string[] = [];
+      for (let i = 0; i < BIRR_DEEDS.length; i++) {
+        const d = new Date(Date.UTC(2026, 5, 10, 18, 45) + i * 2 * 86_400_000);
+        const p = buildNightReviewPoll(d, TZ);
+        seen.push(BIRR_DEEDS.find((deed) => p.options.includes(deed))!);
+      }
+      // Consecutive poll nights differ, and every deed appears once.
+      for (let i = 1; i < seen.length; i++) expect(seen[i]).not.toBe(seen[i - 1]);
+      expect(new Set(seen).size).toBe(BIRR_DEEDS.length);
+    });
+
+    it('is deterministic per date+tz', () => {
+      const d = new Date('2026-06-12T18:45:00Z');
+      expect(buildNightReviewPoll(d, TZ).options).toEqual(buildNightReviewPoll(d, TZ).options);
     });
   });
 });
@@ -340,7 +377,7 @@ describe('regression — أيام التشريق 1447 (Thu 2026-05-28)', () => {
   it('drops «صيام» from that Thursday night’s review poll', () => {
     const poll = buildNightReviewPoll(new Date('2026-05-28T18:45:00Z'), TZ);
     expect(poll.options.some((o) => o.includes('صيام'))).toBe(false);
-    expect(poll.options.length).toBe(9);
+    expect(poll.options.length).toBe(10); // 9 base + بِرّ, fasting dropped
   });
 
   it('resumes once Tashreeq ends — fires again for Mon 2026-06-01 (15 ذو الحجة)', () => {
@@ -373,7 +410,14 @@ describe('notification sessions (silent riders)', () => {
   // The documented design: each session rings once. The anchors ring; the
   // posts co-scheduled a minute later ride along silently. See schedules.ts.
   const AUDIBLE = ['morning_azkar', 'evening_azkar', 'night_review_poll'];
-  const SILENT = ['akhlaq_reminder', 'friday_sunnah', 'fasting_reminder', 'pre_sleep'];
+  const SILENT = [
+    'morning_adab',
+    'akhlaq_reminder',
+    'friday_sunnah',
+    'friday_quiz',
+    'fasting_reminder',
+    'pre_sleep',
+  ];
 
   it('rides the Friday/fasting/pre-sleep posts in silently', () => {
     for (const name of SILENT) {

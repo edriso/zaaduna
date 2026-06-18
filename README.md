@@ -36,7 +36,7 @@ src/
   scheduler.ts    Registers schedules with cron, runs them
   bot.ts          Grammy setup: /start + admin commands
   health.ts       Tiny /health HTTP endpoint for uptime checks
-  content/        The Arabic texts + the poll + welcome + akhlaq library
+  content/        The Arabic texts + polls + welcome + akhlaq/adab libraries + quiz
   lib/            logger, pick (random/fixed), post (send msg + poll)
 scripts/
   send-test.ts    Dev tool: post every schedule once to preview it
@@ -48,13 +48,15 @@ docs/DEPLOY.md    How to deploy
 
 | Name                | When            | What                                                      |
 | ------------------- | --------------- | --------------------------------------------------------- |
-| `morning_azkar`     | every day 05:30 | أذكار الصباح                                              |
-| `friday_sunnah`     | Friday 05:32    | سنن الجمعة: طهارة وزينة، تبكير، الكهف، الصلاة على النبي ﷺ |
-| `akhlaq_reminder`   | every day 16:58 | وقفة في أخلاق المسلم وهَدْي النبي ﷺ (تتناوب يوميًّا)      |
-| `evening_azkar`     | every day 17:00 | أذكار المساء                                              |
-| `fasting_reminder`  | Sun & Wed 21:40 | تذكير صيام الإثنين/الخميس (الليلة التي قبلها)             |
-| `pre_sleep`         | every day 21:43 | سورة المُلك + أذكار النوم + نيّة قيام الليل               |
-| `night_review_poll` | every day 21:45 | Anonymous self-review **poll** (the deeds; Mon/Thu nights add صيام)                |
+| `morning_azkar`     | every day 05:30  | أذكار الصباح                                              |
+| `morning_adab`      | every day 05:31  | وقفة في السُّنن والآداب وأخلاق القلب (تتناوب يوميًّا)     |
+| `friday_sunnah`     | Friday 05:32     | سنن الجمعة: طهارة وزينة، تبكير، الكهف، الصلاة على النبي ﷺ |
+| `akhlaq_reminder`   | every day 16:58  | وقفة في أخلاق المسلم وهَدْي النبي ﷺ (تتناوب يوميًّا)      |
+| `evening_azkar`     | every day 17:00  | أذكار المساء                                              |
+| `friday_quiz`       | Friday 16:59     | Anonymous situational-adab **quiz** (موقف + best response, weekly)                 |
+| `fasting_reminder`  | Sun & Wed 21:40  | تذكير صيام الإثنين/الخميس (الليلة التي قبلها)             |
+| `pre_sleep`         | every day 21:43  | سورة المُلك + أذكار النوم + نيّة قيام الليل               |
+| `night_review_poll` | every other 21:45 | Anonymous self-review **poll** (deeds + a rotating بِرّ slot; Mon/Thu add صيام)   |
 
 Both fasting touchpoints are **Hijri-aware**: the Mon/Thu reminder and
 the poll's «صيام» option are automatically withheld on days voluntary
@@ -71,10 +73,11 @@ a sound; the posts co-scheduled a minute later are sent **silently**
 they just do not buzz. The result is **exactly 3 notification moments a
 day**:
 
-1. A morning one — the azkar rings; on Friday the Surah Al-Kahf reminder
-   rides in silently right after.
-2. A late-afternoon one — the akhlaq reflection arrives silently first,
-   then the evening azkar rings just below it.
+1. A morning one — the azkar rings; the morning adab/sunnah reading (and,
+   on Friday, the Surah Al-Kahf reminder) rides in silently right after.
+2. A late-afternoon one — the akhlaq reflection arrives silently first
+   (and, on Friday, the weekly situational-adab quiz), then the evening
+   azkar rings just below it.
 3. A bedtime one — the fasting reminder (Sunday and Wednesday) and the
    pre-sleep reminder arrive silently, then the poll rings.
 
@@ -153,20 +156,27 @@ pnpm send-test
 Everything lives in source. No database; restart (or redeploy) to apply.
 
 - **Message wording:** edit the matching file in `src/content/`.
-- **The daily akhlaq library:** edit the `akhlaqReminders` list in
-  `src/content/akhlaq.ts`. The bot shows one short post a day; the same date
-  always shows the same one, and the whole list is shown before any repeat.
-  Nothing is ever deleted, so the channel slowly builds a library people can
-  scroll and share. Every saying attributed to the Prophet ﷺ must be sahih
-  or hasan, with its source in the comment above it. The file header explains
-  the rules and how the list size affects how soon a post repeats; read it
-  before adding or removing items.
-- **The poll:** edit `src/content/poll.ts` (the question and its
+- **The two daily reading libraries:** the morning reading is
+  `adabReminders` in `src/content/adab.ts` (sunan/آداب/heart-akhlaq — what
+  to DO today); the evening reading is `akhlaqReminders` in
+  `src/content/akhlaq.ts` (character/shamail — who to BE). Each shows one
+  short post a day by deterministic rotation; the same date always shows the
+  same one, the whole list is shown before any repeat, and nothing is ever
+  deleted, so each builds a browsable, shareable archive. Every saying
+  attributed to the Prophet ﷺ must be sahih or hasan, with its source in the
+  comment above it. Each file header explains the rules and how the list size
+  affects how soon a post repeats; read it before adding/removing items.
+- **The weekly quiz:** edit the `adabQuizzes` list in `src/content/quiz.ts`
+  (a موقف + 2–4 options, one correct, plus a ≤200-char explanation shown
+  after voting). Anonymous, fires every Friday, rotates weekly. Use ONLY
+  agreed-upon adab grounded in explicit nass — never contested fiqh — and
+  keep the tone gentle (see the file header).
+- **The night poll:** edit `src/content/poll.ts` (the question and its
   options). Keep it anonymous and multiple-answer, that is the whole
-  point. The list is built at fire time so Monday and Thursday nights
-  add a «صيام الاثنين/الخميس» option to the base 9 (withheld on Eid /
-  أيام التشريق — see `src/lib/hijri.ts`). Stay at 9 in the base or the
-  Mon/Thu variant overflows Telegram's 10-option limit.
+  point. The list is built at fire time: the 9 base deeds + one rotating
+  بِرّ (حقوق العباد) slot every night, and Monday/Thursday nights add a
+  «صيام الاثنين/الخميس» option (withheld on Eid / أيام التشريق — see
+  `src/lib/hijri.ts`). Telegram now allows up to 12 options per poll.
 - **Times or new entries:** edit `src/schedules.ts`. Each entry is one
   cron rule plus `kind: 'message'` (with `content`) or `kind: 'poll'`
   (with `poll`).

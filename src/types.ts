@@ -20,6 +20,22 @@ export interface PollSpec {
   /** Hours until Telegram auto-closes the poll. Clamped to Telegram's
    *  5s..~30d window in lib/post.ts. Default 22h. */
   closeAfterHours?: number;
+  /**
+   * Poll flavour, mirroring the Bot API's `type` (the kit's sendPoll maps it):
+   *   - 'regular' (default when omitted) — the anonymous self-review vote.
+   *   - 'quiz' — one correct answer + an explanation shown after voting. Used
+   *     by the weekly situational-adab quiz (see content/quiz.ts). A quiz is
+   *     never multi-answer (Telegram forbids it), so the kit forces
+   *     allowsMultipleAnswers off for a quiz regardless of this spec.
+   */
+  type?: 'regular' | 'quiz';
+  /** Quiz only, REQUIRED for a quiz: the 0-based index into `options` of the
+   *  correct answer. Maps to the Bot API's `correct_option_id`. */
+  correctOptionId?: number;
+  /** Quiz only: text Telegram shows when a voter picks a wrong answer or taps
+   *  the lamp icon. Telegram limit 0–200 chars (≤2 line breaks). Keep it a
+   *  gentle teaching note + the daleel — never a scolding. */
+  explanation?: string;
 }
 
 interface BaseSchedule {
