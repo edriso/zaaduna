@@ -69,9 +69,9 @@ export const schedules: ScheduleDef[] = [
     // escapes the text; see content/format.ts.
     content: azkarHtml(morningAzkar),
     parseMode: 'HTML',
-    // Day-alternating card (light/dark), sent as a silent photo above the
-    // text; all three azkar share the day's theme. See content/cards.ts.
-    images: azkarCard('morningAzkar'),
+    // Day-alternating card (variant 1/2), sent as a silent photo above the
+    // text; all three azkar share the day's variant. See content/cards.ts.
+    images: azkarCard('morning-azkar'),
     description: 'أذكار الصباح، كل يوم 5:30 ص (داخل وقت الذكر بين الفجر وطلوع الشمس طوال السنة).',
   },
   {
@@ -143,7 +143,7 @@ export const schedules: ScheduleDef[] = [
     // HTML bold title + partial expandable blockquote, same as morning_azkar.
     content: azkarHtml(eveningAzkar),
     parseMode: 'HTML',
-    images: azkarCard('eveningAzkar'),
+    images: azkarCard('evening-azkar'),
     description: 'أذكار المساء، كل يوم 5:00 م. الأفضل قراءتها بين العصر والمغرب.',
   },
   {
@@ -184,7 +184,7 @@ export const schedules: ScheduleDef[] = [
     // HTML bold title + partial expandable blockquote, same as morning_azkar.
     content: azkarHtml(preSleepReminder),
     parseMode: 'HTML',
-    images: azkarCard('preSleep'),
+    images: azkarCard('pre-sleep-azkar'),
     // One-tap links to the suras this message names. Quran is referenced,
     // not reproduced — these buttons are the reference. المُلك on its own row
     // (most emphasised: تشفع لصاحبها). الكافرون is omitted on purpose: it is

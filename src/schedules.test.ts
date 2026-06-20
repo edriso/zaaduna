@@ -147,16 +147,16 @@ describe('akhlaq_reminder (daily-rotation library)', () => {
 });
 
 describe('azkar card images', () => {
-  // The three azkar carry a day-alternating { light, dark } card. Pin that
+  // The three azkar carry a day-alternating { first, second } card. Pin that
   // they are wired and the files exist (so a missing asset fails CI, not prod).
   for (const name of ['morning_azkar', 'evening_azkar', 'pre_sleep']) {
-    it(`${name} has light + dark card images that exist on disk`, () => {
+    it(`${name} has variant 1 + 2 card images that exist on disk`, () => {
       const s = findSchedule(name);
       expect(s?.kind).toBe('message');
       if (s?.kind !== 'message') throw new Error(`${name} must be a message`);
       expect(s.images, `${name} should have images`).toBeDefined();
-      expect(existsSync(s.images!.light), `missing ${s.images!.light}`).toBe(true);
-      expect(existsSync(s.images!.dark), `missing ${s.images!.dark}`).toBe(true);
+      expect(existsSync(s.images!.first), `missing ${s.images!.first}`).toBe(true);
+      expect(existsSync(s.images!.second), `missing ${s.images!.second}`).toBe(true);
     });
   }
 

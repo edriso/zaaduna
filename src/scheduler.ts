@@ -98,7 +98,7 @@ async function sendForKind(bot: Bot<Context>, def: ScheduleDef): Promise<number 
     logger.warn('Schedule has no content to post, skipping', { name: def.name });
     return null;
   }
-  // Optional day-alternating card (light/dark), sent as a silent photo just
+  // Optional day-alternating card (variant 1/2), sent as a silent photo just
   // above the text; replaced on the next fire. Non-fatal — see sendCard.
   if (def.images) {
     await sendCard(bot, def);
@@ -117,8 +117,8 @@ async function sendForKind(bot: Bot<Context>, def: ScheduleDef): Promise<number 
 }
 
 /**
- * Send the day's azkar card (light on even civil days, dark on odd — see
- * content/cards.ts) as a SILENT photo, and replace the previous card. The
+ * Send the day's azkar card (variant 1 on even civil days, variant 2 on odd —
+ * see content/cards.ts) as a SILENT photo, and replace the previous card. The
  * azkar text far exceeds Telegram's 1024-char photo caption, so the card is
  * its own message just above the text. Tracked under a `${name}::card` state
  * key, separate from the text ring buffer, so the text's replace-on-next-fire

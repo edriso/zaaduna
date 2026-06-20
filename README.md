@@ -157,9 +157,9 @@ Everything lives in source. No database; restart (or redeploy) to apply.
 
 - **Message wording:** edit the matching file in `src/content/`.
 - **The azkar cards:** the three azkar attach a card image that alternates
-  light/dark by day (all three share the day's theme). To change the art,
-  replace the PNGs in `assets/cards/` keeping the
-  `{morningAzkar,eveningAzkar,preSleep}-{light,dark}-card.png` names. They are
+  between variant 1 and variant 2 by day (all three share the day's variant).
+  To change the art, replace the PNGs in `assets/cards/` keeping the
+  `{morning-azkar,evening-azkar,pre-sleep-azkar}-{1,2}.png` names. They are
   sent as a silent photo above the azkar text. See `src/content/cards.ts`.
 - **The two daily reading libraries:** the morning reading is
   `adabReminders` in `src/content/adab.ts` (sunan/آداب/heart-akhlaq — what

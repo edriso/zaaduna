@@ -3,13 +3,14 @@ import { config } from '../config';
 /**
  * Day-alternating azkar card images (morning / evening / pre-sleep).
  *
- * Each azkar has a light and a dark card. The theme alternates by the civil
- * date in config.timezone: light on even day-numbers, dark on odd — so all
- * three azkar on the SAME day share one theme, and consecutive days alternate
- * ("a day light, a day dark"). Keyed off the tz civil date (never the host
- * clock / Date.getDay()), turned into a stable epoch day-number whose parity
- * flips each calendar day — same discipline as isPollNight in content/poll.ts.
- * Stateless, so it is restart-safe by construction.
+ * Each azkar has two cards, variant 1 and variant 2. The variant alternates by
+ * the civil date in config.timezone: variant 1 on even day-numbers, variant 2
+ * on odd — so all three azkar on the SAME day share one variant, and
+ * consecutive days alternate ("a day this, a day that"). Keyed off the tz
+ * civil date (never the host clock / Date.getDay()), turned into a stable epoch
+ * day-number whose parity flips each calendar day — same discipline as
+ * isPollNight in content/poll.ts. Stateless, so it is restart-safe by
+ * construction.
  *
  * The cards live in ./assets/cards (copied into the Docker image; see
  * Dockerfile). They are sent as a SILENT separate photo just before the azkar
@@ -17,21 +18,21 @@ import { config } from '../config';
  * replaced on the next fire, just like the text. See scheduler.ts#sendCard.
  */
 
-export type CardTheme = 'light' | 'dark';
+export type CardVariant = 1 | 2;
 
-/** A light + dark card pair for an azkar, by its file base name. */
+/** The two card files for an azkar, by its file base name. */
 export interface CardPair {
-  light: string;
-  dark: string;
+  first: string;
+  second: string;
 }
 
 const CARDS_DIR = './assets/cards';
 
-/** Build the { light, dark } paths for an azkar card set (e.g. 'morningAzkar'). */
+/** Build the { first, second } paths for an azkar card set (e.g. 'morning-azkar'). */
 export function azkarCard(base: string): CardPair {
   return {
-    light: `${CARDS_DIR}/${base}-light-card.png`,
-    dark: `${CARDS_DIR}/${base}-dark-card.png`,
+    first: `${CARDS_DIR}/${base}-1.png`,
+    second: `${CARDS_DIR}/${base}-2.png`,
   };
 }
 
@@ -49,20 +50,20 @@ function dayNumberInTz(now: Date, tz: string): number {
 }
 
 /**
- * The card theme for a given day: light on even day-numbers, dark on odd, so
- * it flips each calendar day. Defaults to now + config.timezone (the scheduler
- * calls it with no args); the args exist for tests. Flip the `=== 0` to swap
- * which parity is light.
+ * The card variant for a given day: variant 1 on even day-numbers, variant 2
+ * on odd, so it flips each calendar day. Defaults to now + config.timezone (the
+ * scheduler calls it with no args); the args exist for tests. Flip the `=== 0`
+ * to swap which parity is variant 1.
  */
-export function cardThemeFor(now: Date = new Date(), tz: string = config.timezone): CardTheme {
-  return dayNumberInTz(now, tz) % 2 === 0 ? 'light' : 'dark';
+export function cardVariantFor(now: Date = new Date(), tz: string = config.timezone): CardVariant {
+  return dayNumberInTz(now, tz) % 2 === 0 ? 1 : 2;
 }
 
-/** Pick the card path for `now` from a { light, dark } pair. */
+/** Pick the card path for `now` from a { first, second } pair. */
 export function cardFor(
   pair: CardPair,
   now: Date = new Date(),
   tz: string = config.timezone,
 ): string {
-  return cardThemeFor(now, tz) === 'light' ? pair.light : pair.dark;
+  return cardVariantFor(now, tz) === 1 ? pair.first : pair.second;
 }
