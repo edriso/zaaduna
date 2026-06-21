@@ -9,21 +9,21 @@ The bot is a long-polling Grammy process. It needs:
      of repeating azkar. Without it the bot still posts; it just can't
      clean up, so the channel slowly accumulates dupes.
 3. The environment variables below.
-4. A writable working directory for the tiny pointer file (default
-   `./data/last-message-ids.json`). Most hosts give you this for free.
+4. A writable `DATA_DIR` for its two tiny JSON files (default `./data`).
+   Most hosts give you this for free.
 
 ## Environment variables (.env at repo root)
 
-| Variable             | Required | Notes                                                          |
-| -------------------- | -------- | -------------------------------------------------------------- |
-| `BOT_TOKEN`          | yes      | From @BotFather                                                |
-| `CHANNEL_CHAT_ID`    | yes      | Numeric `-100...` (recommended) or `@channel`. Not a URL.      |
-| `CHANNEL_PUBLIC_URL` | no       | Public link shown only in `/start`. Decoupled from sending.    |
-| `ADMIN_TELEGRAM_ID`  | no       | Enables /admin\_\* commands. Empty = no admin commands work.   |
-| `TZ_NAME`            | no       | Cron timezone. Code default UTC; `.env.example` = Africa/Cairo |
-| `STATE_FILE`         | no       | Pointer file path. Default `./data/last-message-ids.json`      |
-| `NODE_ENV`           | no       | `production` for hosted deploys                                |
-| `PORT`               | no       | /health server port (default 8080)                             |
+| Variable             | Required | Notes                                                                   |
+| -------------------- | -------- | ----------------------------------------------------------------------- |
+| `BOT_TOKEN`          | yes      | From @BotFather                                                         |
+| `CHANNEL_CHAT_ID`    | yes      | Numeric `-100...` (recommended) or `@channel`. Not a URL.               |
+| `CHANNEL_PUBLIC_URL` | no       | Public link shown only in `/start`. Decoupled from sending.             |
+| `ADMIN_TELEGRAM_ID`  | no       | Enables /admin\_\* commands. Empty = no admin commands work.            |
+| `TZ_NAME`            | no       | Cron timezone. Code default UTC; `.env.example` = Africa/Cairo          |
+| `DATA_DIR`           | no       | Dir for the bot's two JSON files (state + card cache). Default `./data` |
+| `NODE_ENV`           | no       | `production` for hosted deploys                                         |
+| `PORT`               | no       | /health server port (default 8080)                                      |
 
 `CHANNEL_CHAT_ID` should be the numeric id in production: it never
 changes, so posting can never break if the channel username is renamed.
@@ -191,13 +191,14 @@ each time it fires). The poll lives in `src/content/poll.ts`.
 
 ## State file (`./data/last-message-ids.json`)
 
-The bot writes one tiny JSON file mapping each message-schedule name to
-its last posted `message_id`, so when the schedule fires again it can
-delete the previous copy. Losing the file is not fatal — each schedule
-just leaks one stale message until the next cycle replaces it. On hosts
-with a persistent disk (Railway, VPS, Docker volume) cleanup is exact
-across restarts; on ephemeral hosts it degrades to "one stale per
-schedule per deploy". Override the path with `STATE_FILE` if needed.
+The bot writes two tiny JSON files in `DATA_DIR` (default `./data`): one
+maps each message-schedule name to its last posted `message_id` so it can
+delete the previous copy on the next fire, and one caches Telegram
+`file_id` values so each card image is uploaded only once. Losing either
+is not fatal — the bot just re-derives it (a few stale messages linger, or
+each card is uploaded once more). On hosts with a persistent disk (VPS,
+Docker volume) this survives restarts; on ephemeral hosts it degrades
+gracefully. Point `DATA_DIR` at a mounted volume to keep both files.
 
 ## Logs
 

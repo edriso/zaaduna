@@ -418,17 +418,16 @@ change the count by 1 and try again.
 
 ## Environment variables
 
-| Variable             | Required | Notes                                                             |
-| -------------------- | -------- | ----------------------------------------------------------------- |
-| `BOT_TOKEN`          | yes      | From @BotFather                                                   |
-| `CHANNEL_CHAT_ID`    | yes      | Numeric `-100...` (recommended) or `@channel`                     |
-| `CHANNEL_PUBLIC_URL` | no       | Public link for `/start` only; decoupled from sending             |
-| `ADMIN_TELEGRAM_ID`  | no       | Enables /admin\_\* commands                                       |
-| `TZ_NAME`            | no       | Cron timezone. Code default UTC; `.env.example` sets Africa/Cairo |
-| `STATE_FILE`         | no       | Pointer file path. Default `./data/last-message-ids.json`         |
-| `FILE_ID_CACHE`      | no       | Card file_id cache path. Default `./data/file-ids.json`           |
-| `NODE_ENV`           | no       | `production` for hosted                                           |
-| `PORT`               | no       | /health server port (default 8080)                                |
+| Variable             | Required | Notes                                                                   |
+| -------------------- | -------- | ----------------------------------------------------------------------- |
+| `BOT_TOKEN`          | yes      | From @BotFather                                                         |
+| `CHANNEL_CHAT_ID`    | yes      | Numeric `-100...` (recommended) or `@channel`                           |
+| `CHANNEL_PUBLIC_URL` | no       | Public link for `/start` only; decoupled from sending                   |
+| `ADMIN_TELEGRAM_ID`  | no       | Enables /admin\_\* commands                                             |
+| `TZ_NAME`            | no       | Cron timezone. Code default UTC; `.env.example` sets Africa/Cairo       |
+| `DATA_DIR`           | no       | Dir for the bot's two JSON files (state + card cache). Default `./data` |
+| `NODE_ENV`           | no       | `production` for hosted                                                 |
+| `PORT`               | no       | /health server port (default 8080)                                      |
 
 `CHANNEL_CHAT_ID` is sent to Telegram as-is; the numeric id is the safe
 production choice because it survives a username rename. The public

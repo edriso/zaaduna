@@ -32,6 +32,12 @@ export function channelUrlFrom(raw: string): string | null {
   return m ? `https://t.me/${m[1]}` : null;
 }
 
+// Where the bot keeps its two tiny JSON files (the message-id pointer and the
+// card file_id cache). One knob on purpose: both files share a disk and a
+// lifecycle, so to persist them you point this at one volume and both follow.
+// Trailing slashes are trimmed so `./data` and `./data/` behave the same.
+const dataDir = (process.env.DATA_DIR?.trim() || './data').replace(/\/+$/, '');
+
 const channelChatId = requireEnv('CHANNEL_CHAT_ID').trim();
 // Optional, cosmetic. Kept separate from CHANNEL_CHAT_ID so posting can
 // use the stable numeric id while the /start link comes from here; falls
@@ -50,9 +56,9 @@ export const config = Object.freeze({
   // Timezone for every cron schedule. Defaults to UTC.
   timezone: process.env.TZ_NAME?.trim() || 'UTC',
   // Pointer file for the replace-on-next-fire cleanup (see lib/state.ts).
-  stateFilePath: process.env.STATE_FILE?.trim() || './data/last-message-ids.json',
+  stateFilePath: `${dataDir}/last-message-ids.json`,
   // Content-hash → file_id cache so card images upload once, then resend by
   // file_id (no re-upload, instant client render). See lib/fileCache.ts.
-  fileIdCachePath: process.env.FILE_ID_CACHE?.trim() || './data/file-ids.json',
+  fileIdCachePath: `${dataDir}/file-ids.json`,
   isDev: process.env.NODE_ENV !== 'production',
 });
