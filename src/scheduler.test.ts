@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { InputFile, type Bot, type Context } from 'grammy';
+import { InputFile, GrammyError, type Bot, type Context } from 'grammy';
 import { runSchedule } from './scheduler';
 import { findSchedule } from './schedules';
 import type { MessageSchedule, ScheduleDef } from './types';
@@ -453,10 +453,17 @@ describe('runSchedule azkar card', () => {
     const hash = (await hashFile(cardFor(def.images!)))!;
     await setFileId(hash, 'STALE_ID');
 
-    // First call (by stale id) rejects; the retry (an upload) succeeds.
+    // First call (by stale id) rejects with a 400 (bad file id); the retry
+    // (an upload) succeeds.
+    const stale = new GrammyError(
+      'Bad Request: wrong file identifier',
+      { ok: false, error_code: 400, description: 'wrong file identifier' },
+      'sendPhoto',
+      {},
+    );
     const sendPhoto = vi
       .fn()
-      .mockRejectedValueOnce(new Error('400 wrong file identifier'))
+      .mockRejectedValueOnce(stale)
       .mockResolvedValueOnce({ message_id: 90, photo: [{ file_id: 'FRESH_ID' }] });
     const bot = {
       api: {
@@ -475,6 +482,37 @@ describe('runSchedule azkar card', () => {
     expect(sendPhoto.mock.calls[0][1]).toBe('STALE_ID'); // tried the cached id
     expect(sendPhoto.mock.calls[1][1]).toBeInstanceOf(InputFile); // then re-uploaded
     expect(getFileId(hash)).toBe('FRESH_ID'); // cache healed with the new id
+  });
+
+  it('keeps the cached file_id on a transient (429) error, not just a 400', async () => {
+    const def = findSchedule('morning_azkar') as MessageSchedule;
+    const hash = (await hashFile(cardFor(def.images!)))!;
+    await setFileId(hash, 'GOOD_ID');
+
+    // A 429 is transient, not a bad id: the cached id send fails, the upload
+    // fallback also fails, so this fire posts no card — but the id must SURVIVE
+    // so the next fire can reuse it (no needless re-upload / cache churn).
+    const rateLimited = new GrammyError(
+      'Too Many Requests',
+      { ok: false, error_code: 429, description: 'Too Many Requests: retry after 5' },
+      'sendPhoto',
+      {},
+    );
+    const sendPhoto = vi.fn().mockRejectedValue(rateLimited);
+    const bot = {
+      api: {
+        sendPhoto,
+        sendMessage: vi.fn().mockResolvedValue({ message_id: 95 }),
+        sendPoll: vi.fn(),
+        deleteMessage: vi.fn().mockResolvedValue(true),
+        editMessageReplyMarkup: vi.fn().mockResolvedValue(true),
+      },
+    } as unknown as Bot<Context>;
+
+    const id = await runSchedule(bot, def);
+
+    expect(id).toBe(95); // text still posts (card step is non-fatal)
+    expect(getFileId(hash)).toBe('GOOD_ID'); // id kept, not dropped
   });
 });
 

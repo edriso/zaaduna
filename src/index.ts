@@ -22,11 +22,23 @@ async function main() {
   startScheduler(bot);
   startHealthServer();
 
-  bot.start({
-    onStart: () => {
-      logger.info('Bot is running. Press Ctrl+C to stop.');
-    },
-  });
+  // Not awaited: bot.start() resolves only when polling stops. On a normal
+  // shutdown bot.stop() resolves it cleanly; on a startup failure (e.g. a bad
+  // token) it REJECTS, and because main() has already returned that rejection
+  // would escape main().catch below. Attach a catch so a polling failure still
+  // hits the "let it crash" path (log + exit so the supervisor restarts)
+  // instead of leaving the process half-up (crons firing, no Telegram).
+  bot
+    .start({
+      onStart: () => {
+        logger.info('Bot is running. Press Ctrl+C to stop.');
+      },
+    })
+    .catch((err) => {
+      if (shuttingDown) return; // a stop() during shutdown is expected
+      logger.error('Bot polling stopped unexpectedly', { error: String(err) });
+      process.exit(1);
+    });
 }
 
 let shuttingDown = false;

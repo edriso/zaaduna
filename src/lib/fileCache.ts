@@ -38,6 +38,9 @@ import { logger } from 'telegram-broadcast-kit';
 
 let cache: Record<string, string> = {};
 let filePath: string | null = null;
+// Bumped per write so two persists racing on the same file never share a tmp
+// path (which would let one rename clobber the other's half-written tmp).
+let writeSeq = 0;
 
 /**
  * Load the cache from disk. Call once at startup, before the scheduler (safe to
@@ -118,7 +121,10 @@ async function persist(): Promise<void> {
   const target = filePath;
   try {
     await fs.mkdir(path.dirname(target), { recursive: true });
-    const tmp = `${target}.tmp`;
+    // Unique tmp per write so concurrent persists can't clobber each other's
+    // tmp before its rename. JSON.stringify snapshots the whole live cache, so
+    // whichever rename lands last wins with a complete, consistent file.
+    const tmp = `${target}.${process.pid}.${writeSeq++}.tmp`;
     await fs.writeFile(tmp, JSON.stringify(cache, null, 2), 'utf8');
     await fs.rename(tmp, target);
   } catch (err) {

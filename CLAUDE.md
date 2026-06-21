@@ -304,7 +304,9 @@ cardVariantFor` (epoch day-parity, tz-keyed/stateless, same discipline as
   card's replace-on-next-fire. The cache is keyed by a **hash of the file
   bytes**, not the path, so swapping the art (same filename) misses and
   re-uploads automatically — no manual cache-busting. A cached id can rarely go
-  stale (server purge); `postCard` then drops it and re-uploads once. The store
+  stale (server purge); on a **400** from the file_id send `postCard` drops it
+  and re-uploads, but a transient error (429/network) keeps the id so the next
+  fire can still reuse it (no cache churn). The store
   is a tiny JSON file (`config.fileIdCachePath`, default `./data/file-ids.json`,
   gitignored, loaded by `initFileCache` in `index.ts`) — same "pointer file, not
   a database" weight as `lib/state.ts`: lose it and each card just re-uploads

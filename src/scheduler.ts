@@ -1,4 +1,4 @@
-import { InlineKeyboard, InputFile, type Bot, type Context } from 'grammy';
+import { InlineKeyboard, InputFile, GrammyError, type Bot, type Context } from 'grammy';
 import {
   Scheduler,
   pickContent,
@@ -101,9 +101,18 @@ async function sendForKind(bot: Bot<Context>, def: ScheduleDef): Promise<number 
     return null;
   }
   // Optional day-alternating card (variant 1/2), sent as a silent photo just
-  // above the text; replaced on the next fire. Non-fatal — see sendCard.
+  // above the text; replaced on the next fire. Non-fatal by contract: the card
+  // is a nicety, the text is the point — so any failure here (even an
+  // unexpected throw) must never stop the text from posting.
   if (def.images) {
-    await sendCard(bot, def);
+    try {
+      await sendCard(bot, def);
+    } catch (err) {
+      logger.warn('Card step threw; posting text only', {
+        name: def.name,
+        error: String(err),
+      });
+    }
   }
   const id = await post(bot, config.channelChatId, text, {
     name: def.name,
@@ -181,10 +190,12 @@ async function postCard(bot: Bot<Context>, path: string, name: string): Promise<
       });
       return msg.message_id;
     } catch (err) {
-      // The cached id is probably stale (rare server purge). Forget it and
-      // fall through to a fresh upload below.
-      logger.warn('Cached file_id rejected, re-uploading card', { name, error: String(err) });
-      if (hash) await dropFileId(hash);
+      // Only a 400 means the id itself is bad (stale/purged) — forget it so we
+      // don't keep retrying a dead id. A 429/network blip is transient: keep
+      // the id (the next fire can reuse it) and just fall through to a fresh
+      // upload for this one. Either way the upload below re-caches a good id.
+      logger.warn('Cached file_id send failed, re-uploading card', { name, error: String(err) });
+      if (hash && err instanceof GrammyError && err.error_code === 400) await dropFileId(hash);
     }
   }
 

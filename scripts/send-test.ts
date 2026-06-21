@@ -18,6 +18,7 @@
 import { Bot, type Context } from 'grammy';
 import { initState, post } from 'telegram-broadcast-kit';
 import { config } from '../src/config';
+import { initFileCache } from '../src/lib/fileCache';
 import { runSchedule } from '../src/scheduler';
 import { schedules } from '../src/schedules';
 
@@ -26,8 +27,11 @@ const bot = new Bot<Context>(config.botToken);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
-  // Same init as the real entry point, so cleanup has memory across runs.
+  // Same init as the real entry point, so cleanup has memory across runs and
+  // the card file_id cache behaves exactly like production (upload once, then
+  // resend by file_id).
   await initState(config.stateFilePath);
+  await initFileCache(config.fileIdCachePath);
 
   // Preflight in one call so a bad token / wrong chat id / invite-link
   // slug fails with one clean diagnostic, not N identical 400s.
