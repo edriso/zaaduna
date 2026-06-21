@@ -51,5 +51,8 @@ export const config = Object.freeze({
   timezone: process.env.TZ_NAME?.trim() || 'UTC',
   // Pointer file for the replace-on-next-fire cleanup (see lib/state.ts).
   stateFilePath: process.env.STATE_FILE?.trim() || './data/last-message-ids.json',
+  // Content-hash → file_id cache so card images upload once, then resend by
+  // file_id (no re-upload, instant client render). See lib/fileCache.ts.
+  fileIdCachePath: process.env.FILE_ID_CACHE?.trim() || './data/file-ids.json',
   isDev: process.env.NODE_ENV !== 'production',
 });

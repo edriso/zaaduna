@@ -2,6 +2,7 @@ import { config } from './config';
 import { bot, setBotProfile } from './bot';
 import { startScheduler, stopScheduler } from './scheduler';
 import { startHealthServer, logger, initState } from 'telegram-broadcast-kit';
+import { initFileCache } from './lib/fileCache';
 
 async function main() {
   logger.info('Channel bot starting...', {
@@ -13,6 +14,9 @@ async function main() {
   // Load the pointer file before the scheduler so the first fire already
   // knows which previous message (if any) to delete.
   await initState(config.stateFilePath);
+  // Load the card file_id cache too, so the first fire can resend cards by
+  // file_id (no re-upload) instead of re-uploading from disk.
+  await initFileCache(config.fileIdCachePath);
 
   await setBotProfile();
   startScheduler(bot);

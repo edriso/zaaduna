@@ -41,7 +41,7 @@ zaaduna/
 │   ├── types.ts        ScheduleDef union + PollSpec (no import cycle)
 │   ├── content/        Arabic content modules + poll spec + welcome.ts + format.ts (azkar HTML) + akhlaq.ts (evening daily-rotation library) + adab.ts (morning daily-rotation library) + quiz.ts (weekly situational-adab quiz)
 │   ├── content/cards.ts  azkar card variant (1/2 by day) + path helper
-│   └── lib/            hijri (Umm al-Qura no-fast days)
+│   └── lib/            hijri (Umm al-Qura no-fast days) + fileCache (card file_id cache)
 ├── assets/cards/       azkar card PNGs (variant 1/2), copied into the image
 ├── scripts/
 │   ├── send-test.ts       Manual dev sender (not imported by the app)
@@ -290,6 +290,30 @@ cardVariantFor` (epoch day-parity, tz-keyed/stateless, same discipline as
   Telegram photo limits respected: width+height ≤ 10000, ratio ≤ 20, ≤ 10MB
   (the cards are ~3360×≤6500). To swap art, replace the PNGs in `assets/cards/`
   keeping the `{base}-{1,2}.png` names.
+- **Cards upload ONCE, then resend by `file_id` (`lib/fileCache.ts`).** The
+  naive `sendPhoto(new InputFile(path))` re-uploads the bytes every fire, and
+  Telegram mints a NEW `file_id` each time — so to a client it is a file it has
+  never seen, and it shows a loading spinner and re-downloads, even though the
+  bytes are the exact same card it showed two days ago (there are only 6 files).
+  Fix: `scheduler.ts#postCard` hashes the card bytes, and on a cache hit resends
+  by the cached `file_id` STRING (Telegram serves its own copy, no upload, and
+  clients render instantly — this is what kills the "still loading?" feel); on a
+  miss it uploads via `InputFile` and caches the `file_id` Telegram returns. A
+  `file_id` stays valid after the message that carried it is deleted (it points
+  at the file object, not the message), so this is fully compatible with the
+  card's replace-on-next-fire. The cache is keyed by a **hash of the file
+  bytes**, not the path, so swapping the art (same filename) misses and
+  re-uploads automatically — no manual cache-busting. A cached id can rarely go
+  stale (server purge); `postCard` then drops it and re-uploads once. The store
+  is a tiny JSON file (`config.fileIdCachePath`, default `./data/file-ids.json`,
+  gitignored, loaded by `initFileCache` in `index.ts`) — same "pointer file, not
+  a database" weight as `lib/state.ts`: lose it and each card just re-uploads
+  once, then caches again. file_ids are bot-specific, so the file is per-bot
+  (never shared/committed). This is deliberately zaaduna-local, not a
+  `telegram-broadcast-kit` helper: among the kit's consumers only zaaduna sends
+  photos, and it mirrors the caller-owns-the-cache shape the subscriber bots
+  (tilawah/ayah, on the separate `telegram-bot-kit`) already use — a clean lift
+  into the kit if a second broadcast bot ever needs media.
 - **Poll options are `InputPollOption` objects.** Bot API 7.3+ changed
   `options` from strings to `{ text }[]`; `lib/post.ts` does the map.
 - **Poll text is bidi-isolated (`rtlIsolate`).** Each option + the
@@ -400,6 +424,7 @@ change the count by 1 and try again.
 | `ADMIN_TELEGRAM_ID`  | no       | Enables /admin\_\* commands                                       |
 | `TZ_NAME`            | no       | Cron timezone. Code default UTC; `.env.example` sets Africa/Cairo |
 | `STATE_FILE`         | no       | Pointer file path. Default `./data/last-message-ids.json`         |
+| `FILE_ID_CACHE`      | no       | Card file_id cache path. Default `./data/file-ids.json`           |
 | `NODE_ENV`           | no       | `production` for hosted                                           |
 | `PORT`               | no       | /health server port (default 8080)                                |
 
@@ -483,7 +508,12 @@ the whole pool before repeating), and the azkar cards (`content/cards.ts`:
 the day's variant, tz-keyed + deterministic, and the PNG files exist on disk; plus
 `scheduler.ts` — a card is sent as a SILENT photo before the text, replaced on
 the next fire under a separate `${name}::card` key, and a photo failure is
-non-fatal so the text still posts).
+non-fatal so the text still posts), and the card file_id cache
+(`lib/fileCache.ts`: hash/get/set/drop round-trips, missing/corrupt/tampered
+files start empty without throwing, disk persistence across a reload; plus
+`scheduler.ts#postCard` — a cold cache uploads via `InputFile` and caches the
+returned file_id, a warm cache resends by the file_id string with no upload,
+and a stale id is dropped and re-uploaded once).
 The count is intentionally not stated here so it never goes stale.
 
 `pnpm check` runs `typecheck` + `format:check` + `test` — the same gate

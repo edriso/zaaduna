@@ -11,9 +11,11 @@ import {
   logger,
   type CronJob,
 } from 'telegram-broadcast-kit';
+import type { Message } from 'grammy/types';
 import { schedules } from './schedules';
 import type { MessageSchedule, ScheduleDef } from './types';
 import { cardFor } from './content/cards';
+import { getFileId, setFileId, dropFileId, hashFile } from './lib/fileCache';
 import { config } from './config';
 
 // The bot-specific schedule layer. The generic cron plumbing (error
@@ -125,30 +127,88 @@ async function sendForKind(bot: Bot<Context>, def: ScheduleDef): Promise<number 
  * is untouched. Order is post-then-trim (send new, then delete old) so the
  * channel is never card-less mid-swap. Non-fatal: a failure is logged and the
  * text still posts (the card-less message stands).
+ *
+ * The photo itself goes through postCard, which resends by cached file_id
+ * (no upload) when it can — see lib/fileCache.ts.
  */
 async function sendCard(bot: Bot<Context>, def: MessageSchedule): Promise<void> {
   if (!def.images) return;
   const path = cardFor(def.images);
   const key = `${def.name}::card`;
-  let newId: number;
-  try {
-    const msg = await bot.api.sendPhoto(config.channelChatId, new InputFile(path), {
-      disable_notification: true,
-    });
-    newId = msg.message_id;
-    logger.info('Posted azkar card', { name: def.name, path, messageId: newId });
-  } catch (err) {
-    logger.warn('Failed to send azkar card; posting text only', {
-      name: def.name,
-      path,
-      error: String(err),
-    });
-    return;
-  }
+  const newId = await postCard(bot, path, def.name);
+  if (newId === null) return; // send failed — non-fatal, the text still posts.
   const previous = getMessageIds(key);
   await setMessageIds(key, [newId]);
   for (const oldId of previous) {
     await deleteMessage(bot, config.channelChatId, oldId, { name: key });
+  }
+}
+
+/** The file_id of the largest size of a sent photo, if any. Telegram returns
+ *  several sizes; the last is the largest, and a file_id from any size resends
+ *  the original photo. */
+function largestPhotoFileId(msg: Message): string | undefined {
+  const sizes = msg.photo;
+  return sizes && sizes.length > 0 ? sizes[sizes.length - 1]!.file_id : undefined;
+}
+
+/**
+ * Post one card photo (SILENT) and return its message_id, or null on failure.
+ *
+ * Reuses Telegram's own copy when possible: the card bytes are hashed, and if
+ * that hash has a cached file_id we resend by the string (no upload — Telegram
+ * serves its cached file and clients render it instantly, which is the whole
+ * point — see lib/fileCache.ts). On a cache miss we upload from disk via
+ * InputFile and cache the resulting file_id for next time. A cached file_id
+ * can rarely go stale (server purge); if Telegram rejects it we drop it from
+ * the cache and re-upload once. If the file can't be hashed we just upload
+ * without caching. The card image and its text are byte-stable across days, so
+ * after the first upload every later fire is a cache hit.
+ */
+async function postCard(bot: Bot<Context>, path: string, name: string): Promise<number | null> {
+  const hash = await hashFile(path);
+  const cachedId = hash ? getFileId(hash) : undefined;
+
+  // Fast path: resend Telegram's cached copy by file_id, no upload.
+  if (cachedId) {
+    try {
+      const msg = await bot.api.sendPhoto(config.channelChatId, cachedId, {
+        disable_notification: true,
+      });
+      logger.info('Posted azkar card from cached file_id', {
+        name,
+        messageId: msg.message_id,
+      });
+      return msg.message_id;
+    } catch (err) {
+      // The cached id is probably stale (rare server purge). Forget it and
+      // fall through to a fresh upload below.
+      logger.warn('Cached file_id rejected, re-uploading card', { name, error: String(err) });
+      if (hash) await dropFileId(hash);
+    }
+  }
+
+  // Slow path: upload from disk, then cache the file_id Telegram hands back.
+  try {
+    const msg = await bot.api.sendPhoto(config.channelChatId, new InputFile(path), {
+      disable_notification: true,
+    });
+    const fileId = largestPhotoFileId(msg);
+    if (hash && fileId) await setFileId(hash, fileId);
+    logger.info('Posted azkar card', {
+      name,
+      path,
+      messageId: msg.message_id,
+      cached: Boolean(hash && fileId),
+    });
+    return msg.message_id;
+  } catch (err) {
+    logger.warn('Failed to send azkar card; posting text only', {
+      name,
+      path,
+      error: String(err),
+    });
+    return null;
   }
 }
 

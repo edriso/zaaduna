@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Bot, Context } from 'grammy';
+import { InputFile, type Bot, type Context } from 'grammy';
 import { runSchedule } from './scheduler';
 import { findSchedule } from './schedules';
-import type { ScheduleDef } from './types';
+import type { MessageSchedule, ScheduleDef } from './types';
+import { cardFor } from './content/cards';
+import { _resetForTests as resetFileCache, getFileId, setFileId, hashFile } from './lib/fileCache';
 import {
   _resetForTests as resetState,
   getLastMessageId,
@@ -33,9 +35,11 @@ function fakeBot() {
 }
 
 // Wipe the in-memory pointer store between cases so one test's posts
-// can never trigger the next test's "delete previous" path.
+// can never trigger the next test's "delete previous" path. Reset the card
+// file_id cache too, so a cached id from one card test can't leak into another.
 beforeEach(() => {
   resetState();
+  resetFileCache();
 });
 
 describe('runSchedule dispatch', () => {
@@ -393,6 +397,84 @@ describe('runSchedule azkar card', () => {
 
     expect(id).toBe(60); // text posted despite the card send failing
     expect(getMessageIds('evening_azkar::card')).toEqual([]); // no card tracked
+  });
+
+  it('caches the file_id Telegram returns on the upload (so next fire can reuse it)', async () => {
+    const sendPhoto = vi.fn().mockResolvedValue({
+      message_id: 70,
+      photo: [{ file_id: 'CACHED_THUMB' }, { file_id: 'CACHED_FULL' }],
+    });
+    const bot = {
+      api: {
+        sendPhoto,
+        sendMessage: vi.fn().mockResolvedValue({ message_id: 71 }),
+        sendPoll: vi.fn(),
+        deleteMessage: vi.fn().mockResolvedValue(true),
+        editMessageReplyMarkup: vi.fn().mockResolvedValue(true),
+      },
+    } as unknown as Bot<Context>;
+    const def = findSchedule('morning_azkar') as MessageSchedule;
+
+    await runSchedule(bot, def);
+
+    // Uploaded from disk (an InputFile, not a string id) on the cold cache...
+    expect(sendPhoto.mock.calls[0][1]).toBeInstanceOf(InputFile);
+    // ...and the LARGEST size's file_id is now cached under the card's content hash.
+    const hash = (await hashFile(cardFor(def.images!)))!;
+    expect(getFileId(hash)).toBe('CACHED_FULL');
+  });
+
+  it('resends by cached file_id (no re-upload) when one is already cached', async () => {
+    const def = findSchedule('morning_azkar') as MessageSchedule;
+    const hash = (await hashFile(cardFor(def.images!)))!;
+    await setFileId(hash, 'KNOWN_ID');
+
+    const sendPhoto = vi.fn().mockResolvedValue({ message_id: 80 });
+    const bot = {
+      api: {
+        sendPhoto,
+        sendMessage: vi.fn().mockResolvedValue({ message_id: 81 }),
+        sendPoll: vi.fn(),
+        deleteMessage: vi.fn().mockResolvedValue(true),
+        editMessageReplyMarkup: vi.fn().mockResolvedValue(true),
+      },
+    } as unknown as Bot<Context>;
+
+    await runSchedule(bot, def);
+
+    // Sent by the cached file_id STRING, no upload (no InputFile), still silent.
+    expect(sendPhoto).toHaveBeenCalledTimes(1);
+    expect(sendPhoto.mock.calls[0][1]).toBe('KNOWN_ID');
+    expect(sendPhoto.mock.calls[0][2]?.disable_notification).toBe(true);
+  });
+
+  it('drops a stale cached file_id and re-uploads once', async () => {
+    const def = findSchedule('morning_azkar') as MessageSchedule;
+    const hash = (await hashFile(cardFor(def.images!)))!;
+    await setFileId(hash, 'STALE_ID');
+
+    // First call (by stale id) rejects; the retry (an upload) succeeds.
+    const sendPhoto = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('400 wrong file identifier'))
+      .mockResolvedValueOnce({ message_id: 90, photo: [{ file_id: 'FRESH_ID' }] });
+    const bot = {
+      api: {
+        sendPhoto,
+        sendMessage: vi.fn().mockResolvedValue({ message_id: 91 }),
+        sendPoll: vi.fn(),
+        deleteMessage: vi.fn().mockResolvedValue(true),
+        editMessageReplyMarkup: vi.fn().mockResolvedValue(true),
+      },
+    } as unknown as Bot<Context>;
+
+    const id = await runSchedule(bot, def);
+
+    expect(id).toBe(91); // text still posts
+    expect(sendPhoto).toHaveBeenCalledTimes(2);
+    expect(sendPhoto.mock.calls[0][1]).toBe('STALE_ID'); // tried the cached id
+    expect(sendPhoto.mock.calls[1][1]).toBeInstanceOf(InputFile); // then re-uploaded
+    expect(getFileId(hash)).toBe('FRESH_ID'); // cache healed with the new id
   });
 });
 

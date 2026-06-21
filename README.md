@@ -29,20 +29,27 @@ for years untouched.
 
 ```
 src/
-  index.ts        Entry point: config -> bot -> scheduler -> health
+  index.ts        Entry point: config -> state -> bot -> scheduler -> health
   config.ts       Reads env vars (BOT_TOKEN, CHANNEL_CHAT_ID, ...)
   schedules.ts    THE FILE YOU EDIT MOST: the list of what/when
   types.ts        ScheduleDef + PollSpec types
-  scheduler.ts    Registers schedules with cron, runs them
+  scheduler.ts    Registers schedules with cron, runs them, cleans up old posts
   bot.ts          Grammy setup: /start + admin commands
-  health.ts       Tiny /health HTTP endpoint for uptime checks
-  content/        The Arabic texts + polls + welcome + akhlaq/adab libraries + quiz
-  lib/            logger, pick (random/fixed), post (send msg + poll)
+  content/        The Arabic texts + polls + welcome + akhlaq/adab libraries + quiz + cards
+  lib/            hijri (no-fast days) + fileCache (card file_id cache)
 scripts/
   send-test.ts    Dev tool: post every schedule once to preview it
   post-welcome.ts Dev tool: post or edit the pinned welcome message
 docs/DEPLOY.md    How to deploy
+docs/GUIDE.md     How the project works + how to make changes (start here)
 ```
+
+The shared plumbing (logger, env, the random/fixed content pickers, the
+plain-text/poll send wrappers, the cron runner, the `/health` server, and
+the small JSON state file) lives in the `telegram-broadcast-kit`
+dependency, reused across several bots. This repo keeps only what is
+zaaduna-specific: the schedule list, the Arabic content, and the dispatch
+glue in `scheduler.ts`.
 
 ## What it posts (times assume Africa/Cairo, the .env.example default)
 
@@ -161,6 +168,10 @@ Everything lives in source. No database; restart (or redeploy) to apply.
   To change the art, replace the PNGs in `assets/cards/` keeping the
   `{morning-azkar,evening-azkar,pre-sleep-azkar}-{1,2}.png` names. They are
   sent as a silent photo above the azkar text. See `src/content/cards.ts`.
+  Each card image is uploaded to Telegram only once, then resent by its
+  `file_id` so it loads instantly and is never re-uploaded; swapping a PNG
+  is detected automatically (the cache is keyed by the file content). See
+  `src/lib/fileCache.ts`.
 - **The two daily reading libraries:** the morning reading is
   `adabReminders` in `src/content/adab.ts` (sunan/آداب/heart-akhlaq — what
   to DO today); the evening reading is `akhlaqReminders` in
