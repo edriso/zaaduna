@@ -88,14 +88,20 @@ async function sendForKind(bot: Bot<Context>, def: ScheduleDef): Promise<number 
     const spec = typeof def.poll === 'function' ? def.poll() : def.poll;
     return sendPoll(bot, config.channelChatId, spec, { name: def.name, silent: def.silent });
   }
-  // 'daily' walks an evergreen pool one item a day (same date → same
-  // item, no consecutive repeats), computed in config.timezone so "today"
-  // means today in the bot's TZ, not the host clock. Everything else picks
-  // at random. A fixed string is returned as-is by both pickers.
+  // A content factory (() => string | null) is rebuilt per fire for occasion
+  // text that depends on the date (the special-fast announcements); it returns
+  // null on a no-occasion night, handled by the empty-content guard below (its
+  // schedule's skipIf normally short-circuits first, so that path is just a
+  // safety net). Otherwise: 'daily' walks an evergreen pool one item a day
+  // (same date → same item, no consecutive repeats), computed in
+  // config.timezone so "today" means today in the bot's TZ, not the host clock;
+  // everything else picks at random. A fixed string is returned as-is.
   const text =
-    def.selection === 'daily'
-      ? pickForDay(def.content, new Date(), config.timezone)
-      : pickContent(def.content);
+    typeof def.content === 'function'
+      ? def.content()
+      : def.selection === 'daily'
+        ? pickForDay(def.content, new Date(), config.timezone)
+        : pickContent(def.content);
   if (!text) {
     logger.warn('Schedule has no content to post, skipping', { name: def.name });
     return null;

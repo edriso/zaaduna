@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hijriDate, noFastReason, fastForbiddenTomorrow } from './hijri';
+import { hijriDate, noFastReason, fastForbiddenTomorrow, specialFastDay } from './hijri';
 
 /**
  * The Hijri layer decides which days nafl fasting is forbidden, so the
@@ -73,5 +73,37 @@ describe('fastForbiddenTomorrow (the reminder is about TOMORROW)', () => {
   it('does not suppress an ordinary night', () => {
     // Sunday 06-09 → tomorrow Mon 06-10 = 4 ذو الحجة.
     expect(fastForbiddenTomorrow(at('2024-06-09'), TZ)).toBe(false);
+  });
+});
+
+describe('specialFastDay (offset 0 = the day itself)', () => {
+  it('flags عرفة, تاسوعاء, عاشوراء on their exact days', () => {
+    expect(specialFastDay(at('2024-06-15'), TZ)).toBe('arafah'); // ذو الحجة 9
+    expect(specialFastDay(at('2026-06-24'), TZ)).toBe('tasua'); // محرّم 9
+    expect(specialFastDay(at('2026-06-25'), TZ)).toBe('ashura'); // محرّم 10
+  });
+
+  it('flags the أيّام البيض (13–15) of an ordinary month', () => {
+    expect(specialFastDay(at('2026-06-28'), TZ)).toBe('ayyam-bid'); // محرّم 13
+    expect(specialFastDay(at('2026-06-30'), TZ)).toBe('ayyam-bid'); // محرّم 15
+    expect(specialFastDay(at('2026-07-01'), TZ)).toBeNull(); // محرّم 16 — back to normal
+  });
+
+  it('does NOT flag البيض in رمضان (whole month already fasted)', () => {
+    expect(specialFastDay(at('2025-03-13'), TZ)).toBeNull(); // رمضان 13
+  });
+
+  it('does NOT flag البيض in ذو الحجة (Tashreeq overlap / contested)', () => {
+    expect(specialFastDay(at('2024-06-19'), TZ)).toBeNull(); // ذو الحجة 13 (تشريق)
+    expect(specialFastDay(at('2024-06-21'), TZ)).toBeNull(); // ذو الحجة 15
+  });
+
+  it('returns null on an ordinary day', () => {
+    expect(specialFastDay(at('2024-06-10'), TZ)).toBeNull(); // ذو الحجة 4
+  });
+
+  it('reads TOMORROW with offset 1 (used to merge the generic Mon/Thu nudge)', () => {
+    // Wed eve 2026-06-24 → tomorrow Thu 06-25 = عاشوراء.
+    expect(specialFastDay(at('2026-06-24'), TZ, 1)).toBe('ashura');
   });
 });

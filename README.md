@@ -61,15 +61,26 @@ glue in `scheduler.ts`.
 | `akhlaq_reminder`   | every day 16:58  | وقفة في أخلاق المسلم وهَدْي النبي ﷺ (تتناوب يوميًّا)      |
 | `evening_azkar`     | every day 17:00  | أذكار المساء                                              |
 | `friday_quiz`       | Friday 16:59     | Anonymous situational-adab **quiz** (موقف + best response, weekly)                 |
+| `special_fast_reminder` | seasonal eve 21:37 | تذكير مواسم الصيام: عاشوراء/تاسوعاء، عرفة، ستّ شوّال، الأيّام البيض |
 | `fasting_reminder`  | Sun & Wed 21:40  | تذكير صيام الإثنين/الخميس (الليلة التي قبلها)             |
 | `pre_sleep`         | every day 21:43  | سورة المُلك + أذكار النوم + نيّة قيام الليل               |
-| `night_review_poll` | every other 21:45 | Anonymous self-review **poll** (worship core + rotating أخلاق & بِرّ slots; Mon/Thu add صيام) |
+| `night_review_poll` | every other 21:45 | Anonymous self-review **poll** (worship core + rotating أخلاق & بِرّ slots; a fasting tick on Mon/Thu & special days) |
 
-Both fasting touchpoints are **Hijri-aware**: the Mon/Thu reminder and
-the poll's «صيام» option are automatically withheld on days voluntary
-fasting is forbidden — the two Eids and أيام التشريق — read from the Umm
-al-Qura calendar in `TZ_NAME`. عرفة is never withheld. See
-`src/lib/hijri.ts`.
+The fasting touchpoints are **Hijri-aware** (Umm al-Qura in `TZ_NAME`):
+
+- _Suppress:_ the Mon/Thu reminder and the poll's «صيام» option are
+  automatically withheld on days voluntary fasting is forbidden — the two
+  Eids and أيام التشريق. عرفة is never withheld.
+- _Promote:_ `special_fast_reminder` adds the season-bound fasts the weekly
+  rhythm misses — عاشوراء+تاسوعاء، يوم عرفة، ستّ من شوّال، الأيّام البيض —
+  fired on the **eve** of each. Because the channel is read worldwide off one
+  calculated calendar, each message frames the date as a **window** («بتوقيت
+  القناة»), tells the reader to follow their own country's sighting, and for
+  عاشوراء recommends fasting 9-10-11 (the most complete level _and_ the safe
+  hedge for an uncertain month-start). When a special fast lands on a Mon/Thu
+  the generic nudge stands down so the two never double up, and the poll
+  relabels its fasting tick by occasion. See `src/lib/hijri.ts` and
+  `src/content/specialFasts.ts`.
 
 Posts are deliberately grouped into one tight window so they arrive
 together as a single "session" instead of scattered buzzes. What makes
@@ -85,8 +96,9 @@ day**:
 2. A late-afternoon one — the akhlaq reflection arrives silently first
    (and, on Friday, the weekly situational-adab quiz), then the evening
    azkar rings just below it.
-3. A bedtime one — the fasting reminder (Sunday and Wednesday) and the
-   pre-sleep reminder arrive silently, then the poll rings.
+3. A bedtime one — the fasting reminder (Sunday and Wednesday), any
+   seasonal-fast reminder, and the pre-sleep reminder arrive silently, then
+   the poll rings.
 
 The poll fires last on purpose and is the audible bedtime post: its last
 option is «سورة المُلك وأذكار النوم», so a member who sees the gap in
@@ -191,10 +203,17 @@ Everything lives in source. No database; restart (or redeploy) to apply.
   options). Keep it anonymous and multiple-answer, that is the whole
   point. The list is built at fire time: a fixed worship core (8) + one
   rotating أخلاق check + one rotating بِرّ (حقوق العباد) deed every night, so
-  topics vary across days while the core stays; Monday/Thursday nights add a
-  «صيام الاثنين/الخميس» option (withheld on Eid / أيام التشريق — see
-  `src/lib/hijri.ts`). The question is framed for today *and* tomorrow. Telegram
-  now allows up to 12 options per poll.
+  topics vary across days while the core stays; a fasting tick is added on
+  Monday/Thursday and on a special fast day, where it is named by occasion
+  («صيام عاشوراء/تاسوعاء/يوم عرفة/الأيّام البيض», superseding the weekday label);
+  withheld on Eid / أيام التشريق — see `src/lib/hijri.ts`. The question is framed
+  for today *and* tomorrow. Telegram now allows up to 12 options per poll.
+- **Seasonal fast reminders:** edit the four messages in
+  `src/content/specialFasts.ts` (عاشوراء/تاسوعاء، عرفة، ستّ شوّال، البيض). Keep
+  the window + local-sighting caveat + 9-10-11 hedge framing (never a hard
+  «غدًا» for the moon-critical ones), every hadith sahih/hasan with takhreej.
+  To change when one fires or add an occasion, edit `specialFastReminder` and
+  `specialFastDay` (`src/lib/hijri.ts`).
 - **Times or new entries:** edit `src/schedules.ts`. Each entry is one
   cron rule plus `kind: 'message'` (with `content`) or `kind: 'poll'`
   (with `poll`).

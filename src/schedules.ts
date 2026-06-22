@@ -5,11 +5,12 @@ import { fridaySunnah } from './content/fridaySunnah';
 import { akhlaqReminders } from './content/akhlaq';
 import { adabReminders } from './content/adab';
 import { fastingReminder } from './content/fasting';
+import { specialFastReminder } from './content/specialFasts';
 import { buildNightReviewPoll, isPollNight } from './content/poll';
 import { buildWeeklyQuiz } from './content/quiz';
 import { azkarCard } from './content/cards';
 import { azkarHtml } from './content/format';
-import { fastForbiddenTomorrow } from './lib/hijri';
+import { fastForbiddenTomorrow, specialFastDay } from './lib/hijri';
 import { config } from './config';
 import type { ScheduleDef } from './types';
 
@@ -164,18 +165,52 @@ export const schedules: ScheduleDef[] = [
       'استبيانُ «مواقف الآداب» (تعلُّمٌ أسبوعيّ، سرّيّ): موقفٌ وأحسنُ تصرّف، الجمعة 4:59 م (صامت، مع أذكار المساء). يدور أسبوعيًّا ويبقى أرشيفًا.',
   },
   {
+    name: 'special_fast_reminder',
+    kind: 'message',
+    // Every night at 21:37 — first in the bedtime window, just above the generic
+    // fasting nudge (21:40), pre_sleep (21:43) and the poll (21:45). Gated by
+    // skipIf so it only POSTS on the eve of a special nafl-fast occasion
+    // (عاشوراء/تاسوعاء window, عرفة, ستّ شوّال, الأيّام البيض). See
+    // content/specialFasts.ts for the framing (window + local caveat + hedge).
+    cron: '37 21 * * *',
+    // Factory rebuilt per fire (like the night poll's `poll`): returns tonight's
+    // occasion announcement, or null on an ordinary night. The skipIf below
+    // calls the SAME function, so when it fires the factory is always non-null.
+    content: () => specialFastReminder(),
+    skipIf: (now) => specialFastReminder(now, config.timezone) === null,
+    // Silent: rides the bedtime session; the night poll carries the one ping.
+    silent: true,
+    // keepLast 0 → never tracked/deleted: the (mostly annual) occasions build a
+    // browsable archive, like the akhlaq library. See CLAUDE.md.
+    keepLast: 0,
+    description:
+      'تذكير مواسم الصيام (عاشوراء وتاسوعاء، عرفة، ستّ شوّال، الأيّام البيض) في أوقاتها، 9:37 م (صامت). يُؤطَّر كنافذةٍ لا كـ«غدًا» مع اعتماد رؤية بلدك، ولا يُحذَف فيبقى أرشيفًا.',
+  },
+  {
     name: 'fasting_reminder',
     kind: 'message',
     cron: '40 21 * * 0,3',
     content: fastingReminder,
-    // Skip the nudge when TOMORROW (the fast day) is one nafl fasting is
-    // forbidden — Eid or أيام التشريق. Narrow/asymmetric so يوم عرفة is
-    // never suppressed; see lib/hijri.ts.
-    skipIf: (now) => fastForbiddenTomorrow(now, config.timezone),
+    // Skip the generic Mon/Thu nudge when ANY of:
+    //   (a) TOMORROW (the fast day) is one nafl fasting is forbidden — Eid or
+    //       أيام التشريق (narrow/asymmetric so يوم عرفة is never suppressed);
+    //   (b) TOMORROW is a special fast day (عاشوراء/تاسوعاء/عرفة/البيض) — its
+    //       richer reminder already covers it, e.g. the night before عاشوراء; or
+    //   (c) a special_fast announcement fires TONIGHT — so the generic nudge and
+    //       the special announcement never share a night (the special one always
+    //       wins). Clause (c) catches the eves where TOMORROW is not itself the
+    //       fast day — عرفة's announcement (ذو الحجة ٧) and ستّ شوّال's (شوّال ١)
+    //       — which (b) alone would miss. Together: at most one fasting post a
+    //       night, and the special always supersedes the weekly nudge.
+    // See lib/hijri.ts and content/specialFasts.ts.
+    skipIf: (now) =>
+      fastForbiddenTomorrow(now, config.timezone) ||
+      specialFastDay(now, config.timezone, 1) !== null ||
+      specialFastReminder(now, config.timezone) !== null,
     // Silent: part of the bedtime session; the night poll carries its ping.
     silent: true,
     description:
-      'تذكير صيام الإثنين/الخميس، مساء الأحد والأربعاء 9:40 م (صامت، مع مجموعة ما قبل النوم). يُتخطّى تلقائيًّا إن كان الغد عيدًا أو من أيّام التشريق.',
+      'تذكير صيام الإثنين/الخميس، مساء الأحد والأربعاء 9:40 م (صامت، مع مجموعة ما قبل النوم). يُتخطّى تلقائيًّا إن كان الغد عيدًا أو من أيّام التشريق، أو يومًا له تذكيرُه الخاصّ (عاشوراء/عرفة/البيض).',
   },
   {
     name: 'pre_sleep',

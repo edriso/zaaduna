@@ -5,7 +5,8 @@ import { schedules, findSchedule } from './schedules';
 import { MIN_CLOSE_HOURS, MAX_CLOSE_HOURS, rtlIsolate } from 'telegram-broadcast-kit';
 import { buildNightReviewPoll, isPollNight, BIRR_DEEDS, AKHLAQ_CHECKS } from './content/poll';
 import { renderedText } from './content/format';
-import { hijriDate } from './lib/hijri';
+import { hijriDate, specialFastDay } from './lib/hijri';
+import { specialFastReminder } from './content/specialFasts';
 import type { PollSpec } from './types';
 
 /**
@@ -64,6 +65,18 @@ describe('message schedules', () => {
   it('content resolves to something postable within Telegram limits', () => {
     for (const s of messageSchedules) {
       if (s.kind !== 'message') continue; // narrow for TS
+      if (typeof s.content === 'function') {
+        // Occasion factory (special fasts): returns null on most dates; its
+        // four messages are swept and length-checked in specialFasts.test.ts.
+        // Here just confirm that whatever it yields today still fits.
+        const today = s.content();
+        if (today !== null) {
+          expect(renderedText(today).length, `${s.name} message too long`).toBeLessThanOrEqual(
+            MAX_MESSAGE_CHARS,
+          );
+        }
+        continue;
+      }
       const items = typeof s.content === 'string' ? [s.content] : s.content;
       expect(items.length, `${s.name} has no content`).toBeGreaterThan(0);
       for (const text of items) {
@@ -452,6 +465,137 @@ describe('regression — أيام التشريق 1447 (Thu 2026-05-28)', () => {
   });
 });
 
+// The special-fast feature: a dedicated reminder schedule for the season-bound
+// nafl fasts (عاشوراء/تاسوعاء، عرفة، ستّ شوّال، البيض), the merge that stops it
+// doubling with the generic Mon/Thu nudge, and the night poll relabelling its
+// fasting tick with the occasion. Dates verified against Umm al-Qura (Cairo):
+//   محرّم 1448:  8 = 2026-06-23, 9 (تاسوعاء) = 06-24, 10 (عاشوراء) = 06-25,
+//                12 = 06-27, 13 (أوّل البيض) = 06-28.
+//   ذو الحجة 1445: 7 = 2024-06-13, 9 (عرفة) = 06-15, 10 (عيد) = 06-16.
+//   شوّال 1446:   1 (عيد الفطر) = 2025-03-30.
+describe('special_fast_reminder schedule', () => {
+  const def = findSchedule('special_fast_reminder');
+
+  it('exists as a silent, untracked message with a content factory + skipIf', () => {
+    expect(def?.kind).toBe('message');
+    if (def?.kind !== 'message') throw new Error('special_fast_reminder must be a message');
+    expect(def.silent).toBe(true);
+    expect(def.keepLast).toBe(0); // archive: never replaced/deleted
+    expect(typeof def.content).toBe('function'); // occasion factory
+    expect(def.skipIf).toBeTypeOf('function');
+  });
+
+  it('skipIf fires only on a special-fast eve, and the factory then has content', () => {
+    if (def?.kind !== 'message' || typeof def.content !== 'function') {
+      throw new Error('special_fast_reminder must be a factory message');
+    }
+    // محرّم 8 eve → the عاشوراء/تاسوعاء announcement.
+    const ashuraEve = new Date('2026-06-23T18:37:00Z');
+    expect(def.skipIf!(ashuraEve)).toBe(false);
+    // An ordinary night (محرّم 7) → skip.
+    expect(def.skipIf!(new Date('2026-06-22T18:37:00Z'))).toBe(true);
+  });
+});
+
+describe('special-fast announcements (specialFastReminder)', () => {
+  const TZ = 'Africa/Cairo';
+  const on = (iso: string) => new Date(`${iso}T18:37:00Z`);
+
+  it('fires the right occasion on each eve, null otherwise', () => {
+    expect(specialFastReminder(on('2026-06-23'), TZ)).toContain('عاشوراء'); // محرّم 8
+    expect(specialFastReminder(on('2024-06-13'), TZ)).toContain('عرفة'); // ذو الحجة 7
+    expect(specialFastReminder(on('2025-03-30'), TZ)).toContain('شوّال'); // شوّال 1
+    expect(specialFastReminder(on('2026-06-27'), TZ)).toContain('البيض'); // محرّم 12 (eve of 13)
+    expect(specialFastReminder(on('2026-06-22'), TZ)).toBeNull(); // محرّم 7 — ordinary
+  });
+
+  it('every announcement is non-empty and within Telegram limits', () => {
+    // Sweep a full year of civil days; validate each distinct message produced.
+    const seen = new Set<string>();
+    for (let i = 0; i < 380; i++) {
+      const d = new Date(Date.UTC(2025, 0, 1, 18, 37) + i * 86_400_000);
+      const msg = specialFastReminder(d, TZ);
+      if (msg) seen.add(msg);
+    }
+    expect(seen.size).toBeGreaterThanOrEqual(4); // all four occasions appear in a year
+    for (const msg of seen) {
+      expect(msg.trim().length).toBeGreaterThan(0);
+      expect(msg.length).toBeLessThanOrEqual(MAX_MESSAGE_CHARS);
+    }
+  });
+});
+
+describe('night review poll — special fast days (occasion label, any weekday)', () => {
+  const TZ = 'Africa/Cairo';
+  const poll = (iso: string) => buildNightReviewPoll(new Date(`${iso}T18:45:00Z`), TZ);
+  const fastOpts = (p: PollSpec) => p.options.filter((o) => o.includes('صيام'));
+
+  it('labels عاشوراء by occasion on a Thursday (not «صيام الخميس»)', () => {
+    const p = poll('2026-06-25'); // محرّم 10, Thursday
+    expect(fastOpts(p)).toEqual(['صيام عاشوراء 🌒']); // exactly one, occasion-named
+    expect(p.options.some((o) => o.includes('الخميس'))).toBe(false);
+  });
+
+  it('adds the fasting tick on تاسوعاء even though it is a Wednesday', () => {
+    const p = poll('2026-06-24'); // محرّم 9, Wednesday (normally no fast tick)
+    expect(fastOpts(p)).toEqual(['صيام تاسوعاء 🌒']);
+    expect(p.options.length).toBe(11);
+  });
+
+  it('labels يوم عرفة by occasion', () => {
+    const p = poll('2024-06-15'); // ذو الحجة 9, Saturday
+    expect(fastOpts(p)).toEqual(['صيام يوم عرفة 🌒']);
+  });
+
+  it('labels the أيّام البيض by occasion', () => {
+    const p = poll('2026-06-28'); // محرّم 13, Sunday
+    expect(fastOpts(p)).toEqual(['صيام الأيّام البيض 🌒']);
+  });
+});
+
+describe('fasting_reminder — merge with special-fast reminder', () => {
+  const reminder = findSchedule('fasting_reminder')!;
+
+  it('skips the generic Mon/Thu nudge when tomorrow is عاشوراء (this year, a Thursday)', () => {
+    // Wed 2026-06-24 eve → tomorrow Thu 06-25 = عاشوراء (محرّم 10). The richer
+    // special_fast_reminder (fired محرّم 8) covers it, so the generic one steps aside.
+    expect(specialFastDay(new Date('2026-06-24T18:40:00Z'), 'Africa/Cairo', 1)).toBe('ashura');
+    expect(reminder.skipIf!(new Date('2026-06-24T18:40:00Z'))).toBe(true);
+  });
+
+  it('still fires on an ordinary Mon/Thu eve', () => {
+    // Sun 2024-06-09 → tomorrow Mon 06-10 = ذو الحجة 4 (not special, not forbidden).
+    expect(reminder.skipIf!(new Date('2024-06-09T18:40:00Z'))).toBe(false);
+  });
+
+  it('stands down on a special-announcement night so the two never double up', () => {
+    // The eves whose TOMORROW is not itself the fast day — عرفة's announcement
+    // and ستّ شوّال's — would otherwise post a generic nudge alongside the
+    // announcement when they land on a Sun/Wed. Both must now be suppressed.
+    const TZ = 'Africa/Cairo';
+    // ذو الحجة ٧ 1447 = Sun 2026-05-24 (the عشر/عرفة announcement night).
+    expect(specialFastReminder(new Date('2026-05-24T18:37:00Z'), TZ)).toContain('عرفة');
+    expect(reminder.skipIf!(new Date('2026-05-24T18:40:00Z'))).toBe(true);
+    // شوّال ١ 1446 = Sun 2025-03-30 (the ستّ شوّال announcement night, عيد الفطر).
+    expect(specialFastReminder(new Date('2025-03-30T18:37:00Z'), TZ)).toContain('شوّال');
+    expect(reminder.skipIf!(new Date('2025-03-30T18:40:00Z'))).toBe(true);
+  });
+
+  it('never lets the generic nudge and a special announcement share a night', () => {
+    // Sweep ~3.5 years: whenever a special announcement fires tonight, the
+    // generic Mon/Thu reminder must be suppressed (at most one fasting post).
+    const TZ = 'Africa/Cairo';
+    for (let i = 0; i < 1300; i++) {
+      const d = new Date(Date.UTC(2025, 0, 1, 18, 40) + i * 86_400_000);
+      if (specialFastReminder(d, TZ) !== null) {
+        expect(reminder.skipIf!(d), `generic should be suppressed on ${d.toISOString()}`).toBe(
+          true,
+        );
+      }
+    }
+  });
+});
+
 describe('bedtime window order', () => {
   // Guards the documented design: pre_sleep fires BEFORE night_review_poll,
   // so the poll is the last message in the channel. A user who sees the
@@ -480,6 +624,7 @@ describe('notification sessions (silent riders)', () => {
     'akhlaq_reminder',
     'friday_sunnah',
     'friday_quiz',
+    'special_fast_reminder',
     'fasting_reminder',
     'pre_sleep',
   ];

@@ -1,6 +1,6 @@
 import type { PollSpec } from '../types';
 import { config } from '../config';
-import { noFastReason } from '../lib/hijri';
+import { noFastReason, specialFastDay, type SpecialFastDay } from '../lib/hijri';
 
 /**
  * The nightly self-review poll: anonymous + multiple-answer, so nobody
@@ -18,10 +18,13 @@ import { noFastReason } from '../lib/hijri';
  *     once per poll night, so a WIDER set of character + dealing-with-people
  *     topics is reviewed across the days, without the list ever growing. The
  *     two pools have different lengths, so their pairing varies over time too.
- *   - Day-specific extras from OPTIONS_BY_DAY (Mon/Thu add a صيام option).
- * So the list is 10 most nights, 11 on Mon/Thu. Adding a day-specific list
- * later (e.g. Friday) is one entry in that table — no branching in the
- * function, and one schedule + one state key keeps replace-on-next-fire intact.
+ *   - At most ONE fasting tick (see fastingOptionFor): a Mon/Thu «صيام» option,
+ *     OR — on a special fast day — the occasion by name («صيام عاشوراء/تاسوعاء/
+ *     يوم عرفة/الأيّام البيض») on whatever weekday it lands, superseding the
+ *     Mon/Thu label. Dropped entirely on a day nafl fasting is forbidden
+ *     (Eid / أيام التشريق). Keyed off TODAY's date (the poll reviews today).
+ * So the list is 10 most nights, 11 when a fasting tick applies. One schedule +
+ * one state key keeps replace-on-next-fire intact across all day-types.
  *
  * Telegram limits: question ≤300 chars, 2..12 options (the cap was raised
  * from 10 to 12 in Bot API 9.1, Jul 2025), each ≤100. Keep the emoji at the
@@ -54,28 +57,42 @@ const CORE_NIGHT: readonly string[] = [
   'سورة المُلك وأذكار النوم 🌙',
 ];
 
-/** An extra option spliced into the base list on a given night. */
-interface DayOption {
-  /** Option text (emoji at the END; stay under 100 chars). */
-  option: string;
-  /**
-   * Insert right AFTER the base option equal to this text, so the extra
-   * lands at its intended spot in the order. Omit to append. An unknown
-   * anchor throws — a typo fails the tests instead of shipping a
-   * misordered poll.
-   */
-  after?: string;
-  /**
-   * Mark a "did you fast?" option. These are removed on days nafl fasting
-   * is forbidden (Eid / أيام التشريق) — there was no fast to tick. Set it
-   * on any future fasting extra; non-fasting day options stay untouched.
-   */
-  fasting?: boolean;
-}
-
-// Insert fasting after خشوع الصلاة (first of CORE_NIGHT), before the
-// istighfar/qiyam/sleep cluster — its spot in the day's worship.
+// The single optional "did you fast today?" tick is inserted right AFTER
+// خشوع الصلاة (first of CORE_NIGHT), before the istighfar/qiyam/sleep cluster —
+// its spot in the day's worship.
 const FASTING_ANCHOR = 'اجتهدت في خشوع صلاتي وطمأنينتها، وقُلت أذكار ما بعد الصلاة المفروضة 🕌';
+
+// Plain weekday fasting tick (Mon/Thu) — emoji at the END; < 100 chars.
+const MON_FAST_OPTION = 'صيام الاثنين 🌒';
+const THU_FAST_OPTION = 'صيام الخميس 🌒';
+
+// On a SPECIAL fast day the tick names the occasion instead of the weekday,
+// regardless of which weekday it lands on (so عاشوراء on a Thursday reads
+// «صيام عاشوراء», not «صيام الخميس»). The poll reviews TODAY, so this keys off
+// today's date via specialFastDay (lib/hijri.ts). Emoji at the END; < 100 chars.
+const SPECIAL_FAST_OPTION: Record<SpecialFastDay, string> = {
+  arafah: 'صيام يوم عرفة 🌒',
+  tasua: 'صيام تاسوعاء 🌒',
+  ashura: 'صيام عاشوراء 🌒',
+  'ayyam-bid': 'صيام الأيّام البيض 🌒',
+};
+
+/**
+ * The one fasting tick to show tonight (reviewing TODAY), or null for none.
+ * A special fast day (عاشوراء/تاسوعاء/عرفة/البيض) wins and names the occasion
+ * on ANY weekday; otherwise Mon/Thu get their plain tick — but that is dropped
+ * on a day nafl fasting is forbidden (Eid / أيام التشريق), since there was no
+ * fast to tick. specialFastDay never returns a forbidden day, so it needs no
+ * such check. Pure + tz-keyed, like the rest of the poll.
+ */
+function fastingOptionFor(now: Date, tz: string, weekday: number): string | null {
+  const special = specialFastDay(now, tz, 0);
+  if (special) return SPECIAL_FAST_OPTION[special];
+  if (noFastReason(now, tz)) return null;
+  if (weekday === 1) return MON_FAST_OPTION;
+  if (weekday === 4) return THU_FAST_OPTION;
+  return null;
+}
 
 // ROTATING أخلاق/قلب self-check — one per poll night, so different character
 // and heart topics come up on different days (the لسان/غضب check is the first
@@ -115,14 +132,6 @@ export const BIRR_DEEDS: readonly string[] = [
 function rotateForNight<T>(pool: readonly T[], now: Date, tz: string): T {
   return pool[Math.floor(dayNumberInTz(now, tz) / 2) % pool.length];
 }
-
-// Weekday in TZ_NAME (0=Sun..6=Sat) → options to add that night. THE
-// EDIT POINT for day variants: add a key (e.g. 5 for a Friday list) here;
-// buildNightReviewPoll needs no change.
-const OPTIONS_BY_DAY: Record<number, readonly DayOption[]> = {
-  1: [{ option: 'صيام الاثنين 🌒', after: FASTING_ANCHOR, fasting: true }], // Monday
-  4: [{ option: 'صيام الخميس 🌒', after: FASTING_ANCHOR, fasting: true }], // Thursday
-};
 
 /**
  * "A night yes, a night no": the review poll fires every OTHER night, not
@@ -164,20 +173,15 @@ function weekdayInTz(now: Date, tz: string): number {
   return map[wd] ?? 0;
 }
 
-/** Splice each day-extra into the base list at its anchor (see DayOption). */
-function applyDayOptions(base: readonly string[], extras: readonly DayOption[]): string[] {
+/** Splice `option` right after `anchor` in `base`. An unknown anchor throws —
+ *  a typo fails the tests instead of shipping a misordered poll. */
+function spliceAfter(base: readonly string[], anchor: string, option: string): string[] {
   const options = [...base];
-  for (const { option, after } of extras) {
-    if (after === undefined) {
-      options.push(option);
-      continue;
-    }
-    const at = options.indexOf(after);
-    if (at === -1) {
-      throw new Error(`night review poll: anchor option not found: ${after}`);
-    }
-    options.splice(at + 1, 0, option);
+  const at = options.indexOf(anchor);
+  if (at === -1) {
+    throw new Error(`night review poll: anchor option not found: ${anchor}`);
   }
+  options.splice(at + 1, 0, option);
   return options;
 }
 
@@ -190,22 +194,19 @@ export function buildNightReviewPoll(
   tz: string = config.timezone,
 ): PollSpec {
   const day = weekdayInTz(now, tz);
-  // On a day nafl fasting is forbidden (Eid / أيام التشريق) there was no
-  // fast to tick, so drop the fasting option — `now` is TODAY, the day the
-  // poll reviews. Only fasting-flagged extras go; any future non-fasting
-  // day option survives. The fixed worship core always stands.
-  const allExtras = OPTIONS_BY_DAY[day] ?? [];
-  const extras = noFastReason(now, tz) ? allExtras.filter((e) => !e.fasting) : allExtras;
   // Fixed worship core, with the night's rotating أخلاق + بِرّ checks placed
-  // between the morning and night clusters; then splice the day's fasting
-  // extra in after its anchor (خشوع الصلاة).
+  // between the morning and night clusters.
   const base = [
     ...CORE_WAKE,
     rotateForNight(AKHLAQ_CHECKS, now, tz),
     rotateForNight(BIRR_DEEDS, now, tz),
     ...CORE_NIGHT,
   ];
-  const options = applyDayOptions(base, extras);
+  // At most one fasting tick (reviewing TODAY): the occasion name on a special
+  // fast day (any weekday), else the Mon/Thu tick, else none — dropped on
+  // Eid/Tashreeq. Spliced in after خشوع الصلاة; the worship core always stands.
+  const fastingOption = fastingOptionFor(now, tz, day);
+  const options = fastingOption ? spliceAfter(base, FASTING_ANCHOR, fastingOption) : base;
 
   return {
     question: QUESTION,

@@ -101,3 +101,43 @@ export function noFastReason(instant: Date, tz: string, offsetDays = 0): NoFastR
 export function fastForbiddenTomorrow(now: Date, tz: string): boolean {
   return noFastReason(now, tz, 1) !== null;
 }
+
+/**
+ * A special, season-bound recommended nafl fast that warrants its own
+ * reminder (and its own night-poll label), beyond the weekly Mon/Thu rhythm.
+ */
+export type SpecialFastDay = 'arafah' | 'tasua' | 'ashura' | 'ayyam-bid';
+
+/**
+ * Which special recommended nafl fast, if any, falls on the day `offsetDays`
+ * from `instant` (read in `tz`). Returns the occasion or null.
+ *
+ *   • 'arafah'    — ذو الحجة ٩ (يوم عرفة) — for non-pilgrims; the best nafl
+ *                   fast of the year. Never an Eid/Tashreeq day by definition.
+ *   • 'tasua'     — محرّم ٩ (تاسوعاء).
+ *   • 'ashura'    — محرّم ١٠ (عاشوراء).
+ *   • 'ayyam-bid' — ١٣/١٤/١٥ of a Hijri month, EXCEPT:
+ *                     - رمضان (month 9): the whole month is already fasted, so
+ *                       the «three white days» reminder makes no sense.
+ *                     - ذو الحجة (month 12): the 13th (and the +1-cushion 14th)
+ *                       are أيام التشريق (see noFastReason), and the البيض of
+ *                       that month are contested — so we leave it to the plain
+ *                       Mon/Thu rhythm rather than risk nudging a forbidden day.
+ *
+ * Used to (a) MERGE: suppress the generic Mon/Thu nudge when TOMORROW is one of
+ * these (its own richer reminder already covers it), and (b) RELABEL the night
+ * poll's fasting tick with the occasion. Pure + tz-keyed, same discipline as
+ * noFastReason; unit-tested against fixed dates. عاشوراء/تاسوعاء/عرفة are never
+ * Eid/Tashreeq, and البيض excludes ذو الحجة, so a non-null result is always a
+ * day nafl fasting is permitted (no extra noFastReason check needed).
+ */
+export function specialFastDay(instant: Date, tz: string, offsetDays = 0): SpecialFastDay | null {
+  const { y, m, d } = gregorianYMDInTz(instant, tz);
+  const { month, day } = hijriOfCivilDay(y, m, d + offsetDays);
+
+  if (month === 12 && day === 9) return 'arafah';
+  if (month === 1 && day === 9) return 'tasua';
+  if (month === 1 && day === 10) return 'ashura';
+  if (day >= 13 && day <= 15 && month !== 9 && month !== 12) return 'ayyam-bid';
+  return null;
+}

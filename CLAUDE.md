@@ -39,9 +39,9 @@ zaaduna/
 │   ├── scheduler.ts    runSchedule() dispatch + ring-buffer (cron registry from the kit)
 │   ├── schedules.ts    THE EDIT POINT: the schedule list + findSchedule
 │   ├── types.ts        ScheduleDef union + PollSpec (no import cycle)
-│   ├── content/        Arabic content modules + poll spec + welcome.ts + format.ts (azkar HTML) + akhlaq.ts (evening daily-rotation library) + adab.ts (morning daily-rotation library) + quiz.ts (weekly situational-adab quiz)
+│   ├── content/        Arabic content modules + poll spec + welcome.ts + format.ts (azkar HTML) + akhlaq.ts (evening daily-rotation library) + adab.ts (morning daily-rotation library) + quiz.ts (weekly situational-adab quiz) + specialFasts.ts (seasonal fast reminders: عاشوراء/عرفة/ستّ شوّال/البيض)
 │   ├── content/cards.ts  azkar card variant (1/2 by day) + path helper
-│   └── lib/            hijri (Umm al-Qura no-fast days) + fileCache (card file_id cache)
+│   └── lib/            hijri (Umm al-Qura: no-fast days + special-fast days) + fileCache (card file_id cache)
 ├── assets/cards/       azkar card PNGs (variant 1/2), copied into the image
 ├── scripts/
 │   ├── send-test.ts       Manual dev sender (not imported by the app)
@@ -229,6 +229,42 @@ explanation`); the bot's local `PollSpec` mirrors those fields.
   the reader's own local Eid knowledge) is the backstop for the rare
   opposite drift — the reminder itself stays clean year-round, no
   per-fire disclaimer. We never trust the calculation alone for a ruling.
+- **Seasonal fasts — promoted, framed as a window not a "tomorrow"
+  (`content/specialFasts.ts`, `special_fast_reminder`).** The counterpart to
+  the no-fast suppression above: where `noFastReason` _hides_ a nudge, this
+  _adds_ one for the season-bound nafl fasts the weekly Mon/Thu rhythm misses —
+  **عاشوراء+تاسوعاء، يوم عرفة، ستّ من شوّال، الأيّام البيض**. One nightly,
+  silent, `keepLast: 0` schedule (so the occasions build a browsable archive)
+  whose `content` is a **factory `() => string | null`** (the same pattern as
+  `PollSchedule.poll`; see `types.ts` → `MessageSchedule.content`). It posts the
+  occasion announcement on the **eve** of the occasion and null otherwise; the
+  schedule's `skipIf` calls the **same** `specialFastReminder` so the date logic
+  lives in one place and the no-occasion night is cleanly skipped (no
+  empty-content warning). Triggers (Umm al-Qura, in `config.timezone`): محرّم 8
+  → the عاشوراء/تاسوعاء window, ذو الحجة 7 → عرفة + the عشر, شوّال 1 → ستّ شوّال,
+  day 12 of any month → الأيّام البيض (excluding **رمضان** — whole month fasted —
+  and **ذو الحجة** — Tashreeq/contested).
+  - **Framing: window + local caveat + 9-10-11 hedge.** The bot broadcasts to
+    ONE channel read worldwide off a single _calculated_ table, but a reader's
+    local crescent sighting can differ ±1 day. So a flat «صُم غدًا» would be
+    wrong for many. Each message instead states the Umm al-Qura date «بتوقيت
+    القناة» as guidance, tells the reader to follow **their own country's**
+    announcement, and for عاشوراء recommends **صيام ٩-١٠-١١** — which is at once
+    the _most complete_ level (Ibn al-Qayyim) AND the safe hedge Imam Ahmad
+    gave for an uncertain month-start. The single-timezone weakness becomes the
+    message's content.
+  - **Merge with the Mon/Thu nudge (the special always wins its night).**
+    `fasting_reminder.skipIf` stands the generic nudge down when (a) tomorrow is
+    a forbidden day, **(b)** tomorrow is a `specialFastDay` (its richer reminder
+    covers it — e.g. the night before عاشوراء), or **(c)** a special
+    announcement fires _tonight_ (catches عرفة's/ستّ شوّال's eves, whose
+    tomorrow is not itself the fast day). Net: never two fasting posts a night.
+    The night poll relabels its single fasting tick by **occasion** on a special
+    day («صيام عاشوراء/تاسوعاء/يوم عرفة/الأيّام البيض») on whatever weekday it
+    lands, superseding the «صيام الاثنين/الخميس» label (see `fastingOptionFor`
+    in `content/poll.ts`); `specialFastDay` in `lib/hijri.ts` is the shared
+    detector. Tests pin the triggers, the no-double-post guarantee, the
+    occasion relabel, and the البيض exclusions.
 - **Channel text uses NO `parse_mode`, with one tiny carve-out.** Arabic
   du'a/Quran references contain `* _ ( ) <` etc. that Markdown/HTML would
   400 on. Plain text renders Arabic + emoji perfectly, so it is the
@@ -402,16 +438,25 @@ change the count by 1 and try again.
    little margin under 100 chars — `rtlIsolate` adds 2; see below).
    The list is a fixed worship core (8: `CORE_WAKE` + `CORE_NIGHT`) + one
    rotating أخلاق check (`AKHLAQ_CHECKS`) + one rotating بِرّ deed
-   (`BIRR_DEEDS`) = 10 most nights; Mon/Thu nights add one fasting option → 11.
+   (`BIRR_DEEDS`) = 10 most nights; a fasting tick adds one → 11 on Mon/Thu and
+   on a special fast day, where it is relabelled by occasion (`fastingOptionFor`).
    Edit the pools to add topics; keep the worship core fixed. Telegram now
    allows **12** options per poll (Bot API 9.1), so there is headroom, but
    tests pin the exact counts. The poll fires every OTHER night (`isPollNight`
    - `night_review_poll.skipIf` — see the poll-cadence design note); to make
      it nightly again, drop that `skipIf` in `schedules.ts`, and to shift
      which nights it lands on, flip the `=== 0` in `isPollNight`.
-4. Times / new schedules → edit `src/schedules.ts`.
+4. Seasonal fast reminders → edit the four message constants in
+   `src/content/specialFasts.ts` (عاشوراء/تاسوعاء، عرفة، ستّ شوّال، البيض).
+   Keep the **window + local-sighting caveat + 9-10-11 hedge** framing (never a
+   hard «غدًا» for the moon-critical ones), every marfūʿ text sahih/hasan with
+   takhreej in the header, and stay plain text under 4096. To change WHEN one
+   fires or add an occasion, edit `specialFastReminder` (the eve trigger) and,
+   for the poll label + the Mon/Thu merge, `specialFastDay` in `lib/hijri.ts`.
+   The poll option label lives in `SPECIAL_FAST_OPTION` (`content/poll.ts`).
+5. Times / new schedules → edit `src/schedules.ts`.
    The framework code does not need to change.
-5. Sura/reference links under a message → edit that schedule's `buttons`
+6. Sura/reference links under a message → edit that schedule's `buttons`
    in `src/schedules.ts` (rows of `{ text, url }`); the welcome's are in
    `src/content/welcome.ts` → `welcomeButtons`. Use `https://` URLs and
    keep button text short. See the inline-buttons design note above.
@@ -496,7 +541,13 @@ text and an `https://` URL; `runSchedule` attaches them via
 `editMessageReplyMarkup` only when present and a failed attach is
 non-fatal), `lib/hijri.ts` (Umm al-Qura mapping; Eid/Tashreeq
 suppression incl. the +1 day-14 cushion; عرفة and ستّ من شوّال never
-suppressed; the poll drops «صيام» on a Tashreeq day), the morning
+suppressed; the poll drops «صيام» on a Tashreeq day; and `specialFastDay`
+flagging عرفة/تاسوعاء/عاشوراء/البيض with the رمضان + ذو الحجة exclusions), the
+seasonal fasts (`content/specialFasts.ts` + `schedules.ts`: the right occasion
+fires on each eve and null otherwise, every announcement is non-empty and
+≤4096, the generic Mon/Thu nudge stands down whenever a special announcement
+fires the same night — a multi-year sweep proves no double-post — and the night
+poll relabels its fasting tick by occasion on any weekday), the morning
 `content/adab.ts` library (same pool-health + daily-rotation + min-gap
 guards as akhlaq, with its 📿/🤲/🚫 streams), the night poll's بِرّ slot
 (exactly one rotating deed every night, advances once per poll night, tz-keyed

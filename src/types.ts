@@ -83,7 +83,18 @@ interface BaseSchedule {
  *  daily rotation (see `selection` and the kit's pick.ts). */
 export interface MessageSchedule extends BaseSchedule {
   kind: 'message';
-  content: string | readonly string[];
+  /**
+   * The text to post. Three shapes:
+   *   - a fixed string,
+   *   - an array (one entry chosen per fire — see `selection`), or
+   *   - a factory `() => string | null`, rebuilt per fire for OCCASION content
+   *     that depends on the date (e.g. the special-fast announcements keyed off
+   *     the Hijri calendar). It returns null when there is nothing to post
+   *     tonight; pair it with a `skipIf` that calls the same function so the
+   *     fire is cleanly skipped (no empty-content warning). This mirrors the
+   *     poll factory (PollSchedule.poll). `selection` is ignored for a factory.
+   */
+  content: string | readonly string[] | (() => string | null);
   /**
    * How an array `content` is chosen each fire (ignored for a fixed
    * string):

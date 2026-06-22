@@ -127,6 +127,19 @@ the days of Tashreeq. The Monday/Thursday fasting nudge and the poll's
 fasting option are automatically withheld on those days, read from the Umm
 al-Qura calendar. See `src/lib/hijri.ts`. Arafah is never withheld.
 
+**Seasonal fast reminders.** Beyond the weekly Monday/Thursday nudge, the bot
+also reminds about the season-bound voluntary fasts: عاشوراء + تاسوعاء، يوم
+عرفة، ستّ من شوّال، والأيّام البيض. Each one fires on the **eve** of the
+occasion. Because the channel is read worldwide off one calculated calendar
+and local moon-sightings differ by up to a day, each reminder is framed as a
+**window** (it states the Umm al-Qura date "بتوقيت القناة" but tells the reader
+to follow their own country's sighting), and for عاشوراء it recommends fasting
+the 9th, 10th and 11th — at once the most complete level and the safe hedge
+when the month's start is uncertain. When a special fast falls on a
+Monday/Thursday, the generic nudge steps aside so you never get two reminders
+the same night, and the poll names the fast by occasion. See
+`src/content/specialFasts.ts`.
+
 **Azkar cards upload once.** Each azkar attaches a card image. The naive way
 re-uploads the image every time, which makes Telegram treat it as a brand
 new file so clients show a loading spinner and download it again. Instead the
