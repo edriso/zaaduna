@@ -247,8 +247,11 @@ explanation`); the bot's local `PollSpec` mirrors those fields.
   - **Framing: window + local caveat + 9-10-11 hedge.** The bot broadcasts to
     ONE channel read worldwide off a single _calculated_ table, but a reader's
     local crescent sighting can differ ±1 day. So a flat «صُم غدًا» would be
-    wrong for many. Each message instead states the Umm al-Qura date «بتوقيت
-    القناة» as guidance, tells the reader to follow **their own country's**
+    wrong for many. Each message instead gives the date as an approximation
+    labelled «الحساب الفلكي (تقويم أمّ القرى)» — plain "astronomical
+    calculation" wording a lay reader gets, the Umm al-Qura name kept in
+    parentheses (the old coined «بتوقيت القناة» confused people) — tells the
+    reader to follow **their own country's**
     announcement, and for عاشوراء recommends **صيام ٩-١٠-١١** — which is at once
     the _most complete_ level (Ibn al-Qayyim) AND the safe hedge Imam Ahmad
     gave for an uncertain month-start. The single-timezone weakness becomes the
